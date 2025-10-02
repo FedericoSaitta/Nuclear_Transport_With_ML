@@ -9,7 +9,7 @@ git clone --recurse-submodules https://github.com/FedericoSaitta/Nuclear_Transpo
 
 To build the openMC library and use its Python API
 ``` bash
-cd external/openmc
+cd Nuclear_Transport_With_ML/external/openmc
 mkdir build
 cd build
 cmake -DCMAKE_INSTALL_PREFIX=$HOME/.local ..
