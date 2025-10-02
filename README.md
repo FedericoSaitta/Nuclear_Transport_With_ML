@@ -25,4 +25,8 @@ python3 -m pip install openmc
 To test Python library installation:
 ``` bash
 python3 test.py
-``` 
+```
+
+## Downloading Data
+To download the cross section data (7 Gb) and Depletion chains (30 Mb) can be done here: https://openmc.org/official-data-libraries/.
+The cross section data contains an .xml file along with three folders: Neutron, Photon and wmp. The depletion data is a single .xlm file.
