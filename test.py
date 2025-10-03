@@ -11,5 +11,3 @@ geometry.root = cell
 print("Geometry object created:", geometry)
 
 print("OpenMC Python API works")
-
-
