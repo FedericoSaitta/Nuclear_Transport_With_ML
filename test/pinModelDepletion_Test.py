@@ -5,9 +5,15 @@ import matplotlib.pyplot as plt
 import os
 
 def main():
-  # Path for the openmc executable and configure it
-  os.environ['OPENMC_EXEC'] = "../openmc/build/bin/openmc"
+  name = 'Pin_Model_Depletion_Test/'
   script_dir = os.path.dirname(os.path.abspath(__file__))
+
+  openmc_exec_path = os.path.abspath(os.path.join(script_dir, "../external/openmc/build/bin/openmc"))
+  results_dir = os.path.abspath(os.path.join(script_dir, "results/" + name))
+  os.makedirs(results_dir, exist_ok=True)
+
+  # Path for the openmc executable and configure it
+  os.environ['OPENMC_EXEC'] = openmc_exec_path
   openmc.config['cross_sections'] = os.path.join(script_dir, "../data/cross_sections.xml")
   chain_file = os.path.join(script_dir, "../data/simple_chain.xml")
 
@@ -54,8 +60,6 @@ def main():
   root_univ = openmc.Universe(cells=[root_cell])
   geometry = openmc.Geometry(root_univ)
 
-  geometry.export_to_xml()
-
   # Settings - INCREASED particles for better statistics
   settings = openmc.Settings()
   settings.particles = 100
@@ -69,8 +73,9 @@ def main():
   source.energy = openmc.stats.Watt()
   settings.source = source
 
-  settings.export_to_xml()
-  materials.export_to_xml()
+  materials.export_to_xml(path=results_dir)
+  geometry.export_to_xml(path=results_dir)
+  settings.export_to_xml(path=results_dir)
 
   # Create model
   model = openmc.model.Model(geometry, materials, settings)
@@ -81,10 +86,8 @@ def main():
   print(chain_dict)
 
   # Create operator - FIXED: Changed to "source-rate" normalization
-  operator = openmc.deplete.CoupledOperator(
-      model, 
-      chain_file
-  )
+  os.chdir(results_dir)
+  operator = openmc.deplete.CoupledOperator(model, chain_file)
 
   # Adjust power and time steps
   power = 174  # Watts (this is now interpreted as source rate)
@@ -104,7 +107,8 @@ def main():
   print("Depletion calculation complete!")
 
   # Load and plot results
-  results = openmc.deplete.ResultsList.from_hdf5("./depletion_results.h5")
+  results_file = os.path.join(results_dir, "depletion_results.h5")
+  results = openmc.deplete.ResultsList.from_hdf5(results_file)
   time, k = results.get_eigenvalue()
   time /= (24 * 60 * 60)  # Convert to days
   print("k-array:", k)
@@ -117,7 +121,7 @@ def main():
   plt.title("Reactivity vs Time")
   plt.grid(True, alpha=0.3)
   plt.tight_layout()
-  plt.savefig("k_eff_vs_time.png", dpi=300)
+  plt.savefig(os.path.join(results_dir, "k_eff_vs_time.png"), dpi=300)
   plt.show()
 
   # Plot U-235 depletion
@@ -130,7 +134,7 @@ def main():
   plt.grid(True, alpha=0.3)
   plt.legend()
   plt.tight_layout()
-  plt.savefig("u235_depletion.png", dpi=300)
+  plt.savefig(os.path.join(results_dir, "u235_depletion.png"), dpi=300)
   plt.show()
 
   # Plot Xe-135 buildup
@@ -143,7 +147,7 @@ def main():
   plt.grid(True, alpha=0.3)
   plt.legend()
   plt.tight_layout()
-  plt.savefig("xe135_buildup.png", dpi=300)
+  plt.savefig(os.path.join(results_dir, "xe135_buildup.png"), dpi=300)
   plt.show()
 
   # Plot U-235 fission rate
@@ -155,7 +159,7 @@ def main():
   plt.title("U-235 Fission Rate")
   plt.grid(True, alpha=0.3)
   plt.tight_layout()
-  plt.savefig("fission_rate.png", dpi=300)
+  plt.savefig(os.path.join(results_dir, "fission_rate.png"), dpi=300)
   plt.show()
 
 # This is very important, without this, multiple imports will be run 

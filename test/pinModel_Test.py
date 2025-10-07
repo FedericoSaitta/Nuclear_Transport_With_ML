@@ -2,10 +2,15 @@ import openmc
 import os
 
 def main():
+  name = 'Pin_Model_Test'
   # Path for the openmc executable
-  openmc_exec_path = "../openmc/build/bin/openmc"
   script_dir = os.path.dirname(os.path.abspath(__file__))
+
+  openmc_exec_path = os.path.abspath(os.path.join(script_dir, "../external/openmc/build/bin/openmc"))
+  results_dir = os.path.abspath(os.path.join(script_dir, "results/" + name))
   openmc.config['cross_sections'] = os.path.join(script_dir, "../data/cross_sections.xml")
+
+  os.makedirs(results_dir, exist_ok=True)
 
   # For pure elements use add_element, for composites use add_nuclide
 
@@ -32,7 +37,6 @@ def main():
 
   # Export materials
   materials = openmc.Materials([uo2, zirconium, water])
-  materials.export_to_xml()
 
   # --- Fuel pin geometry ---
   fuel_outer_radius = openmc.ZCylinder(r=0.39)
@@ -65,18 +69,16 @@ def main():
   # Root universe and geometry
   root_universe = openmc.Universe(cells=[fuel, gap, clad, moderator])
   geometry = openmc.Geometry(root_universe)
-  geometry.export_to_xml()
 
   # --- Settings ---
   point = openmc.stats.Point((0, 0, 0))
   source = openmc.Source(space=point)
 
-  settings = openmc.Settings()
+  settings = openmc.Settings(path=results_dir)
   settings.source = source
   settings.batches = 100
   settings.inactive = 10
   settings.particles = 1000
-  settings.export_to_xml()
 
   # --- Tallies ---
   cell_filter = openmc.CellFilter(fuel)
@@ -86,11 +88,22 @@ def main():
   tally.scores = ['total', 'fission', 'absorption', '(n,gamma)']
 
   tallies = openmc.Tallies([tally])
-  tallies.export_to_xml()
+
+
+  materials.export_to_xml(path=results_dir)
+  geometry.export_to_xml(path=results_dir)
+  settings.export_to_xml(path=results_dir)
+  tallies.export_to_xml(path=results_dir)
+
+
+  print(">>> Current working directory:", os.getcwd())
+  print(">>> Intended OpenMC working directory:", results_dir)
+  print(">>> Full path to openmc executable:", os.path.abspath(openmc_exec_path))
 
   # --- Run OpenMC ---
   openmc.run(
     openmc_exec=openmc_exec_path,
+    cwd=results_dir,
   )
 
 if __name__ == "__main__":
