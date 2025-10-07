@@ -19,7 +19,7 @@ cd ..
 ```
 To install the Python bindings
 ``` bash
-python3 -m pip install openmc
+python3 -m pip install .
 ``` 
 
 To test Python library installation:
