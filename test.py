@@ -1,4 +1,5 @@
 import openmc
+import openmc.deplete
 
 print("OpenMC version:", openmc.__version__)
 
@@ -10,4 +11,4 @@ cell = openmc.Cell(name="Empty cell")
 geometry.root = cell
 print("Geometry object created:", geometry)
 
-print("OpenMC Python API works")
+print("OpenMC and OpenMC.deplete Python API works")
