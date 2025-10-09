@@ -11,3 +11,4 @@ Makefile
 *.xml
 *.png
 *.out
+*.pyc
