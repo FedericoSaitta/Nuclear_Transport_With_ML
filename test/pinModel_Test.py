@@ -1,5 +1,12 @@
 import openmc
 import os
+import numpy as np
+import matplotlib.pyplot as plt
+import sys
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../util")))
+
+import plot_helper
 
 def main():
   name = 'Pin_Model_Test'
@@ -77,8 +84,18 @@ def main():
   settings = openmc.Settings(path=results_dir)
   settings.source = source
   settings.batches = 100
-  settings.inactive = 10
-  settings.particles = 1000
+  settings.inactive = 0
+  settings.particles = 10_000
+
+  m = openmc.RegularMesh()
+  m.dimension = [50, 50, 1]  # finer mesh improves entropy smoothness
+  ll, ur = geometry.bounding_box
+
+  print(ll, ur)
+  m.lower_left = (float(ll[0])-0.0001, float(ll[1])-0.0001, -100000.0)
+  m.upper_right = (float(ur[0])+0.0001, float(ur[1])+0.0001,  100000.0)
+
+  settings.entropy_mesh = m
 
   # --- Tallies ---
   cell_filter = openmc.CellFilter(fuel)
@@ -105,6 +122,19 @@ def main():
     openmc_exec=openmc_exec_path,
     cwd=results_dir,
   )
+
+  sp_path = '/home/t97807fs/Nuclear_Transport_With_ML/test/results/Pin_Model_Test/statepoint.100.h5'
+
+  sp = openmc.StatePoint(sp_path)
+
+  entropy = sp.entropy  # list of entropy values per active batch
+  batches = range(1, len(entropy)+1)  # x-axis: batch number
+
+  plot_helper.Shannon_Entropy(batches, entropy, save_path=os.path.join(results_dir, "shannon_entropy.png"))
+  
+  # k-effective per batch
+  kvals = [k for k in sp.k_generation]
+  plot_helper.K_Effective(batches, kvals, save_path=os.path.join(results_dir, "keff_vs_batch.png"))
 
 if __name__ == "__main__":
   main()

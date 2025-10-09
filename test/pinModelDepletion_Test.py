@@ -16,7 +16,7 @@ def main():
   # Path for the openmc executable and configure it
   os.environ['OPENMC_EXEC'] = openmc_exec_path
   openmc.config['cross_sections'] = os.path.join(script_dir, "../data/cross_sections.xml")
-  chain_file = os.path.join(script_dir, "../data/simple_chain.xml")
+  chain_file = os.path.join(script_dir, "../data/chain_casl_pwr.xml")
 
   # Create materials
   fuel = openmc.Material(name="uo2")
@@ -92,7 +92,7 @@ def main():
 
   # Adjust power and time steps
   power = 174  # Watts (this is now interpreted as source rate)
-  time_steps = [30*24*3600]*6  # 6 months in seconds
+  time_steps = [30*24*3600]*36 # 6 months in seconds
 
   # Use PredictorIntegrator
   integrator = openmc.deplete.PredictorIntegrator(
@@ -100,7 +100,6 @@ def main():
       time_steps, 
       power,
       timestep_units='s', 
-      
   )
 
   integrator.integrate()

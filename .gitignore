@@ -1,5 +1,6 @@
 # Ignore build artifacts
 /build/
+/__pycache__/
 /test/results/
 CMakeCache.txt
 CMakeFiles/
