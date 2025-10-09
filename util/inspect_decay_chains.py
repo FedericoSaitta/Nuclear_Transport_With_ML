@@ -9,7 +9,7 @@ chain = openmc.deplete.Chain.from_xml(os.path.join(script_dir, chain_file))
 # List all isotopes tracked
 print(f"Number of nuclides tracked: {len(chain.nuclides)}\n")
 
-# Iterate over nuclides
+# Iterate over all nuclides
 for nuc in chain.nuclides:
     print(f"Nuclide: {nuc.name}, Half-life: {nuc.half_life}")
 

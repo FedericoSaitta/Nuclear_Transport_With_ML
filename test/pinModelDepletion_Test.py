@@ -16,7 +16,7 @@ def main():
   # Path for the openmc executable and configure it
   os.environ['OPENMC_EXEC'] = openmc_exec_path
   openmc.config['cross_sections'] = os.path.join(script_dir, "../data/cross_sections.xml")
-  chain_file = os.path.join(script_dir, "../data/chain_casl_pwr.xml")
+  chain_file = os.path.join(script_dir, "../data/simple_chain.xml")
 
   # Create materials
   fuel = openmc.Material(name="uo2")
