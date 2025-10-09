@@ -9,13 +9,17 @@ chain = openmc.deplete.Chain.from_xml(os.path.join(script_dir, chain_file))
 # List all isotopes tracked
 print(f"Number of nuclides tracked: {len(chain.nuclides)}\n")
 
+print(f"Attributes of chain: {dir(chain)}")
+print(f"Attributes of nuc: {dir(chain.nuclides[0])}")
+
 # Iterate over all nuclides
 for nuc in chain.nuclides:
     print(f"Nuclide: {nuc.name}, Half-life: {nuc.half_life}")
 
     # Iterate over decay modes
     for decay in nuc.decay_modes:
-        decay_type, branching_ratio, daughter = decay
+
+        decay_type, daughter, branching_ratio = decay
         print(f"  Decays to {daughter} via {decay_type}, BR={branching_ratio}")
 
     # Check fission yields
