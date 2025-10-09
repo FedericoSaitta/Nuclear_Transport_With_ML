@@ -3,6 +3,7 @@ import math
 import openmc.deplete
 import matplotlib.pyplot as plt
 import os
+import time
 
 def main():
   name = 'Pin_Model_Depletion_Test/'
@@ -15,7 +16,7 @@ def main():
   # Path for the openmc executable and configure it
   os.environ['OPENMC_EXEC'] = openmc_exec_path
   openmc.config['cross_sections'] = os.path.join(script_dir, "../data/cross_sections.xml")
-  chain_file = os.path.join(script_dir, "../data/simple_chain.xml")
+  chain_file = os.path.join(script_dir, "../data/chain_casl_pwr.xml")
 
   # Create materials
   fuel = openmc.Material(name="uo2")
@@ -40,7 +41,7 @@ def main():
   # SET VOLUMES BEFORE CREATING MATERIALS COLLECTION
   fuel.volume  = math.pi * radii[0]**2                    # fuel pin
   clad.volume  = math.pi * (radii[1]**2 - radii[0]**2)   # cladding
-  water.volume = 0.62**2 - math.pi * radii[1]**2         # moderator
+  water.volume = 0.62**2 - math.pi * radii[1]**2
 
   # Now create materials collection
   materials = openmc.Materials([fuel, clad, water])
@@ -62,7 +63,7 @@ def main():
 
   # Settings - INCREASED particles for better statistics
   settings = openmc.Settings()
-  settings.particles = 100
+  settings.particles = 1_000
   settings.inactive = 10
   settings.batches = 50
 
@@ -165,4 +166,8 @@ def main():
 # This is very important, without this, multiple imports will be run 
 # from the python multiprocessing module
 if __name__ == "__main__":
+  start_time = time.perf_counter()  # Start timing
   main()
+  end_time = time.perf_counter()    # End timing
+  elapsed = end_time - start_time
+  print(f"\nTotal runtime: {elapsed:.2f} seconds ({elapsed/60:.2f} minutes)")
