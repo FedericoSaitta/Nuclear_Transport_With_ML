@@ -7,8 +7,12 @@ from loguru import logger
 import pandas as pd
 from datetime import datetime
 import numpy as np
+import sys
 
 from reactor_sim import create_materials, set_material_volumes, create_geometry, create_settings
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../util")))
+
+import plot_helper
 
 ## Functions to setup the openMC environment ##
 def setup_logging(script_dir):
@@ -87,11 +91,6 @@ def generate_data(seed):
   time, k = results.get_keff()
   time /= (24 * 60 * 60)
 
-  # Categorize nuclides
-  actinides = [nuc for nuc in nuclides if nuc.startswith(('U', 'Pu', 'Np', 'Am', 'Cm'))]
-  fission_products = [nuc for nuc in nuclides if nuc not in actinides]
-
-
   # Create label with current time and home directory
   current_time = datetime.now().strftime("%Y%m%d_%H%M%S")
   home_dir = os.path.expanduser("~")
@@ -113,38 +112,7 @@ def generate_data(seed):
   file_exists = os.path.isfile(file_path)
   df.to_csv(file_path, mode='a', index=False, header=not file_exists)
 
-
-  # Plot actinides
-  if actinides:
-    plt.figure(figsize=(12, 6))
-    for nuclide in actinides:
-      _, concentration = results.get_atoms("1", nuclide, nuc_units="atom/b-cm")
-      plt.plot(time, concentration, marker='o', linewidth=2, label=nuclide)
-    
-    plt.xlabel("Time [d]")
-    plt.ylabel("Number density [atom/b-cm]")
-    plt.title("Actinide Number Density Evolution")
-    plt.yscale('log')
-    plt.grid(True, alpha=0.3, which='both')
-    plt.legend()
-    plt.tight_layout()
-    plt.savefig("actinides_number_density.png", dpi=300)
-
-  # Plot fission products, these are all 0 at t=0
-  if fission_products:
-    plt.figure(figsize=(12, 6))
-    for nuclide in fission_products:
-      _, concentration = results.get_atoms("1", nuclide, nuc_units="atom/b-cm")
-      plt.plot(time[1:], concentration[1:], marker='o', linewidth=2, label=nuclide)
-
-    plt.xlabel("Time [d]")
-    plt.ylabel("Number density [atom/b-cm]")
-    plt.title("Fission Product Number Density Evolution")
-    plt.yscale('log')
-    plt.grid(True, alpha=0.3, which='both')
-    plt.legend()
-    plt.tight_layout()
-    plt.savefig("fission_products_number_density.png", dpi=300)
+  plot_helper.plot_generated_data(nuclides, data, save_folder=script_dir)
 
 
 if (__name__ == "__main__"):
