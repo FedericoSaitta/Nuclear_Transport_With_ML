@@ -12,3 +12,5 @@ Makefile
 *.png
 *.out
 *.pyc
+*.log
+*.csv
