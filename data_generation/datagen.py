@@ -26,7 +26,17 @@ def setup_paths(script_dir, name):
   os.makedirs(results_dir, exist_ok=True)
   
   os.environ['OPENMC_EXEC'] = openmc_exec_path
+  os.environ['HDF5_USE_FILE_LOCKING'] = 'FALSE' 
+
   openmc.config['cross_sections'] = os.path.join(script_dir, "../data/cross_sections.xml")
+
+  os.environ['OPENMC_CROSS_SECTIONS'] = str(openmc.config['cross_sections'])
+  if 'HDF5_USE_MMAP' not in os.environ:
+    os.environ['HDF5_USE_MMAP'] = '1'
+  os.environ['HDF5_CACHE_SIZE'] = str(100 * 1024 * 1024) # 100 MB Cache
+
+  os.environ['OMP_NUM_THREADS'] = '4'
+
   chain_file = os.path.join(script_dir, "../data/simple_chain.xml")
   chain = openmc.deplete.Chain.from_xml(chain_file) # Load chain once
   
@@ -50,8 +60,10 @@ def generate_data(config_dict):
   set_material_volumes(fuel, clad, water, radii=radii, pitch=pitch)
   materials = openmc.Materials([fuel, clad, water])
   geometry = create_geometry(materials, radii=radii, pitch=pitch)
-
   settings = create_settings(config_dict)
+
+  settings.verbosity = 1  # Reduce output verbosity (1-10, lower is quieter)
+  settings.output = {'tallies': False}  # Skip tally files if not needed
 
   # Export geometry and settings (these don't change)
   geometry.export_to_xml(path=results_dir)
@@ -129,16 +141,22 @@ if (__name__ == "__main__"):
 
   ### DATA GENERATION CONFIG ###
   ### 'random var': [min, max]
-  config_dict = {'seed': 911651453, 'num_depl_steps': 100, 'delta_t': 10*24*3600, # 10 days
-                'enrichment': 3.1, # In %
-                'fuel_density': 10.4, # In g/cm^3
-                'particles': 2_000, 'inactive': 5, 'batches': 20, 'temp_method': 'interpolation',
-                
-                'power': [0, 40], # In watts / g
-                't_fuel': [600, 1200], # In Kelvin
-                't_mod': [550, 600], # In Kelvin
-                't_clad': [570, 670], # In Kelvin
-                }
+  config_dict = {
+    'seed': 911651453, 
+    'num_depl_steps': 10, 
+    'delta_t': 10*24*3600,
+    'enrichment': 3.1,
+    'fuel_density': 10.4,
+    'particles': 2_000, 
+    'inactive': 5, 
+    'batches': 20, 
+    'temp_method': 'interpolation',
+    
+    'power': [0, 40],
+    't_fuel': [300, 2500],  # Extreme to verify correctness
+    't_mod': [300, 650],
+    't_clad': [300, 1200],
+  }
   import time
 
   start_time = time.perf_counter()
