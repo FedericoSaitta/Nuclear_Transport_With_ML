@@ -2,7 +2,11 @@
 import openmc
 import math
 
-def create_materials(enrichment=4.25, fuel_density=10.4):
+def create_materials(config_dict):
+
+  enrichment = config_dict['enrichment']
+  fuel_density = config_dict['fuel_density'] # in g/cm^3
+
   fuel = openmc.Material(name="uo2")
   fuel.add_element("U", 1, percent_type="ao", enrichment=enrichment)
   fuel.add_element("O", 2)
@@ -21,7 +25,7 @@ def create_materials(enrichment=4.25, fuel_density=10.4):
   
   return fuel, clad, water
 
-
+# Note these are called volumes but as this is a 2D problem they are effectively areas
 def set_material_volumes(fuel, clad, water, radii=[0.42, 0.45], pitch=0.62):
   fuel.volume  = math.pi * radii[0]**2
   clad.volume  = math.pi * (radii[1]**2 - radii[0]**2)
@@ -46,7 +50,14 @@ def create_geometry(materials, radii=[0.42, 0.45], pitch=0.62):
   return geometry
 
 
-def create_settings(seed=None, particles=10, inactive=5, batches=20, temperature=294.0, temp_method='interpolation'):
+def create_settings(config_dict): 
+  seed = config_dict['seed']
+  particles = config_dict['particles']
+  
+  inactive = config_dict['inactive']
+  batches = config_dict['batches']
+  temp_method = config_dict['temp_method']
+
   settings = openmc.Settings()
   settings.particles = particles
   settings.inactive = inactive
@@ -58,7 +69,7 @@ def create_settings(seed=None, particles=10, inactive=5, batches=20, temperature
   source.energy = openmc.stats.Watt()
   settings.source = source
 
-  settings.temperature = {"default": temperature, "method": temp_method}
+  settings.temperature = {"method": temp_method}
 
   if seed is not None:
     settings.seed = seed

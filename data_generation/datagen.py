@@ -33,15 +33,15 @@ def setup_paths(script_dir, name):
   return results_dir, chain
 
 
-
-def generate_data(seed):
+def generate_data(config_dict):
   script_dir = os.path.dirname(os.path.abspath(__file__))
 
   setup_logging(script_dir)
   results_dir, chain = setup_paths(script_dir, 'Data_Gen/') # Return chain object already opened
-  logger.info(f"Using seed: {seed}")
+  logger.info(f"Using seed: {config_dict['seed']}")
+  np.random.seed(config_dict['seed'])
 
-  fuel, clad, water = create_materials(enrichment=4.25, fuel_density=10.4)
+  fuel, clad, water = create_materials(config_dict)
 
   radii = [0.42, 0.45]
   pitch = 0.62
@@ -51,7 +51,7 @@ def generate_data(seed):
   materials = openmc.Materials([fuel, clad, water])
   geometry = create_geometry(materials, radii=radii, pitch=pitch)
 
-  settings = create_settings(seed, particles=10, inactive=5, batches=20, temperature=294.0, temp_method='interpolation')
+  settings = create_settings(config_dict)
 
   # Export geometry and settings (these don't change)
   geometry.export_to_xml(path=results_dir)
@@ -59,17 +59,22 @@ def generate_data(seed):
 
   os.chdir(results_dir) # Change working directory so OpenMC finds xml files
 
-  power = [10, 50, 100, 200, 400]  # Watts
-  time_steps = [30*24*3600]*5  # 5 months each
-  fuel_temps = [900, 1000, 1100, 1200, 1300]  # K
-  mod_temps  = [580, 590, 600, 610, 620]  # K
+  fuel_mass_g = config_dict['fuel_density'] * fuel.volume # Fuel density times volume (in g /cm^3)
+
+  n = config_dict['num_depl_steps']
+  time_steps = [config_dict['delta_t']] * n # 5 months each
+  power = list(np.random.uniform(config_dict['power'][0], config_dict['power'][1], n))# W
+  fuel_temps = list(np.random.uniform(config_dict['t_fuel'][0], config_dict['t_fuel'][1], n))# k
+  mod_temps = list(np.random.uniform(config_dict['t_mod'][0], config_dict['t_mod'][1], n))# k
+  clad_temps = list(np.random.uniform(config_dict['t_clad'][0], config_dict['t_clad'][1], n)) # k
   
-  for i in range(len(time_steps)):
-    logger.info(f"Step {i+1}/{len(time_steps)}: T_fuel={fuel_temps[i]}K, T_mod={mod_temps[i]}K, Power={power[i]}W")
+  for i in range(n):
+    logger.info(f"Step {i+1}/{n}: T_fuel={fuel_temps[i]}K, T_mod={mod_temps[i]}K, Power={power[i]}W")
     
-    # Update temperatures
+    # Update temperatures for all the materials
     fuel.temperature = fuel_temps[i]
     water.temperature = mod_temps[i]
+    clad.temperature = clad_temps[i]
     materials.export_to_xml(path=results_dir)
 
     model = openmc.model.Model(geometry, materials, settings)
@@ -79,7 +84,7 @@ def generate_data(seed):
       operator = openmc.deplete.CoupledOperator(model, chain,  prev_results=openmc.deplete.Results("depletion_results.h5"))
     
     # Depletion Integration step
-    integrator = openmc.deplete.PredictorIntegrator(operator, [time_steps[i]], [power[i]], timestep_units='s')
+    integrator = openmc.deplete.PredictorIntegrator(operator, [time_steps[i]], [power[i]*fuel_mass_g], timestep_units='s')
     integrator.integrate()
 
   # All results get appended to same depletion file
@@ -89,7 +94,7 @@ def generate_data(seed):
   nuclides = results[0].index_nuc.keys() 
 
   time, k = results.get_keff()
-  time /= (24 * 60 * 60)
+  time /= (24 * 3600) # Get time in seconds
 
   # Create label with current time and home directory
   current_time = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -99,7 +104,8 @@ def generate_data(seed):
   int_p = list(np.cumsum(np.array(power)))
 
   data = {'run_label': [label]*len(time), 'time_days': time, 'k_eff': k[:, 0], 'k_eff_std': k[:, 1], 
-          'power_W': power + ['NaN'], 'int_p_W': int_p + ['NaN'], 'fuel_temp_K': fuel_temps + ['NaN'], 'mod_temp_K': mod_temps + ['NaN']}
+          'power_W_g': power + ['NaN'], 'int_p_W': int_p + ['NaN'], 'fuel_temp_K': fuel_temps + ['NaN'], 
+          'mod_temp_K': mod_temps + ['NaN'], 'clad_temp_K': clad_temps + ['NaN']}
 
   # Get concentration for each nuclide
   for nuclide in nuclides:
@@ -120,6 +126,28 @@ if (__name__ == "__main__"):
   import random
   random.seed()  # Seed from system time + process ID
   seed = random.randint(1, 2**31 - 1)
-  seed = None # Complete repdroducibility for now
 
-  generate_data(seed)
+  ### DATA GENERATION CONFIG ###
+  ### 'random var': [min, max]
+  config_dict = {'seed': 911651453, 'num_depl_steps': 100, 'delta_t': 10*24*3600, # 10 days
+                'enrichment': 3.1, # In %
+                'fuel_density': 10.4, # In g/cm^3
+                'particles': 2_000, 'inactive': 5, 'batches': 20, 'temp_method': 'interpolation',
+                
+                'power': [0, 40], # In watts / g
+                't_fuel': [600, 1200], # In Kelvin
+                't_mod': [550, 600], # In Kelvin
+                't_clad': [570, 670], # In Kelvin
+                }
+  import time
+
+  start_time = time.perf_counter()
+
+  try:
+    generate_data(config_dict)
+  except Exception as e:
+    logger.exception(f"Error during data generation: {e}")
+  finally:
+    end_time = time.perf_counter()
+    elapsed = end_time - start_time
+    logger.info(f"Data generation completed in {elapsed:.2f} seconds.")

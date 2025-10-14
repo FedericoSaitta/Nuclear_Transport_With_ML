@@ -3,7 +3,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import os
 
-
 #######################################
 ##### BATCH LEVEL DATA PLOTTING #######
 #######################################
@@ -46,7 +45,6 @@ def K_Effective(batches, keff, save_path="keff_plot.png"):
   plt.tight_layout()
   plt.savefig(save_path, dpi=300)
   plt.close()
-
 
 #######################################
 ###### STEP LEVEL DATA PLOTTING #######
@@ -92,20 +90,29 @@ def plot_generated_data(nuclides, data, save_folder):
     plt.savefig(os.path.join(save_folder,"fission_products_number_density.png"), dpi=300)
 
   # ---------- Additional Reactor Parameters ----------
+  plt.figure(figsize=(12, 6))
+  plt.errorbar(time, data['k_eff'], yerr=data['k_eff_std'], marker='o', linewidth=2, label='k_eff')
+  plt.xlabel("Time [d]")
+  plt.ylabel('Effective Multiplication Factor (k_eff)')
+  plt.title(f"keff vs Time")
+  plt.grid(True, alpha=0.3)
+  plt.legend()
+  plt.tight_layout()
+  plt.savefig(os.path.join(save_folder, f"k_eff.png"), dpi=300)
+  plt.close()
+
   parameters = {
-    # These should be plotted separately on their own error bars
-    #'k_eff': "Effective Multiplication Factor (k_eff)",
-    #'k_eff_std': "k_eff Standard Deviation",
-    'power_W': "Reactor Power [W]",
-    'int_p_W': "Integrated Power [W]",
+    'power_W_g': "Reactor Power [W / g]",
+    'int_p_W': "Integrated Power [W / g]",
     'fuel_temp_K': "Fuel Temperature [K]",
-    'mod_temp_K': "Moderator Temperature [K]"
+    'mod_temp_K': "Moderator Temperature [K]", 
+    'clad_temp_K': "Clad Temperature [K]"
   }
 
   for param, ylabel in parameters.items():
     if param in data:
       plt.figure(figsize=(12, 6))
-      plt.plot(time[1:], data[param][:-1], marker='o', linewidth=2, label=param)
+      plt.plot(time[1:], data[param][:-1], marker='o', linestyle='None', color='black',label=param)
       plt.xlabel("Time [d]")
       plt.ylabel(ylabel)
       plt.title(f"{ylabel} vs Time")

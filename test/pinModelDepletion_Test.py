@@ -4,6 +4,7 @@ import openmc.deplete
 import matplotlib.pyplot as plt
 import os
 import time
+from openmc.deplete import Results
 
 def main():
   name = 'Pin_Model_Depletion_Test/'
@@ -84,27 +85,26 @@ def main():
   # Set up depletion
   print("Starting depletion calculation...")
   chain_dict = openmc.deplete.Chain.from_xml(chain_file)
-  print(chain_dict)
 
   # Create operator - FIXED: Changed to "source-rate" normalization
   os.chdir(results_dir)
   operator = openmc.deplete.CoupledOperator(model, chain_file)
+  operator.prev_res = Results('/home/t97807fs/Nuclear_Transport_With_ML/test/results/Pin_Model_Depletion_Test/depletion_results.h5')
 
   # Adjust power and time steps
   power = 174  # Watts (this is now interpreted as source rate)
-  time_steps = [30*24*3600]*36 # 6 months in seconds
+  time_steps = [30*24*3600]*1 # 6 months in seconds
 
   # Use PredictorIntegrator
   integrator = openmc.deplete.PredictorIntegrator(
       operator, 
       time_steps, 
       power,
-      timestep_units='s', 
+      timestep_units='s',
+      continue_timesteps=False, 
   )
 
   integrator.integrate()
-
-  print("Depletion calculation complete!")
 
   # Load and plot results
   results_file = os.path.join(results_dir, "depletion_results.h5")

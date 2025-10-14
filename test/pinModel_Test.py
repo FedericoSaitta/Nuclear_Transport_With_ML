@@ -117,10 +117,12 @@ def main():
   print(">>> Intended OpenMC working directory:", results_dir)
   print(">>> Full path to openmc executable:", os.path.abspath(openmc_exec_path))
 
+
   # --- Run OpenMC ---
   openmc.run(
     openmc_exec=openmc_exec_path,
     cwd=results_dir,
+    
   )
 
   sp_path = '/home/t97807fs/Nuclear_Transport_With_ML/test/results/Pin_Model_Test/statepoint.100.h5'
