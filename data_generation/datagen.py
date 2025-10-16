@@ -1,5 +1,5 @@
 import os
-os.environ["OMP_NUM_THREADS"] = "2"
+os.environ["OMP_NUM_THREADS"] = "3"
 
 HOUR_IN_SECONDS = 3600
 DAY_IN_SECONDS = 24 * HOUR_IN_SECONDS
@@ -15,7 +15,7 @@ import sys
 import random
 import multiprocessing as mp
 
-from reactor_sim import create_materials, set_material_volumes, create_geometry, create_settings
+from reactor_sim import create_materials, set_material_volumes, create_geometry, create_settings, update_water_composition
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../util")))
 import plot_helper
 
@@ -94,12 +94,14 @@ def run_depletion_simulation(fuel, clad, water, materials, geometry, settings, c
     fuel.temperature = conditions['fuel_temps'][i]
     water.temperature = conditions['mod_temps'][i]
     clad.temperature = conditions['clad_temps'][i]
-    water.set_density('g/cm3', conditions['mod_densities'][i])
-    # Remove old boron and add new
-    water.remove_element('B')
-    water.add_element('B', conditions['boron_ppm'][i] * 1e-6, 'wo')
 
-    materials.export_to_xml(path=results_dir)
+    update_water_composition(
+          water, 
+          conditions['boron_ppm'][i], 
+          conditions['mod_densities'][i]
+        )
+
+    materials.export_to_xml(path=results_dir) 
     
     model = openmc.model.Model(geometry, materials, settings)
     power_watts = conditions['power'][i] * fuel_mass_g
@@ -111,13 +113,6 @@ def run_depletion_simulation(fuel, clad, water, materials, geometry, settings, c
 def extract_results_data(results, conditions):
   time, k = results.get_keff()
   time /= DAY_IN_SECONDS
-
-  burnup = []
-  for i, res in enumerate(results):
-    if i == 0: burnup.append(0.0)
-    else:
-      bu = results.get_burnup(i, units='MWd/kg') # Burnup in MWd/kgU
-      burnup.append(bu)
   
   current_time = datetime.now().strftime("%Y%m%d_%H%M%S")
   home_dir = os.path.expanduser("~")
@@ -131,7 +126,6 @@ def extract_results_data(results, conditions):
     'k_eff_std': k[:, 1],
     'power_W_g': conditions['power'] + ['NaN'],
     'int_p_W': integrated_power + ['NaN'],
-    'burnup_MWd_kg': burnup,
     'fuel_temp_K': conditions['fuel_temps'] + ['NaN'],
     'mod_temp_K': conditions['mod_temps'] + ['NaN'],
     'clad_temp_K': conditions['clad_temps'] + ['NaN'], 
@@ -234,7 +228,7 @@ if __name__ == "__main__":
   }
   
   DATA_GEN_RUNS = 1 # Number of time to repeat the program
-  NUM_WORKERS = 20   # Number of parallel program instances
+  NUM_WORKERS = 15   # Number of parallel program instances
 
   for i in range(DATA_GEN_RUNS):
     configs = create_worker_configs(base_config, NUM_WORKERS)
