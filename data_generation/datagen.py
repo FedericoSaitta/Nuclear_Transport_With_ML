@@ -209,25 +209,25 @@ def run_parallel_simulations(configs):
 
 if __name__ == "__main__":
   base_config = {
-    'num_depl_steps': 10,
+    'num_depl_steps': 100,
     'delta_t': 10 * DAY_IN_SECONDS,
-    'enrichment': 3.1,
-    'fuel_density': 10.4,
+    'enrichment': 3.1, # BEAVRS
+    'fuel_density': 10.4, # BEAVRS
     'particles': 5_000,
     'inactive': 10,
     'batches': 50,
     'temp_method': 'interpolation',
-    'power': [0, 40],
-    't_fuel': [600, 1200],
-    't_mod': [550, 600],
-    't_clad': [570, 670],
-    'rho_mod': [0.74, 1.00],
-    'boron_ppm': [0, 1000],
-    'geometry_radii': [0.39218, 0.45720],
-    'geometry_pitch': 1.25984,            
+    'power': [0, 41.4],      # PAPER
+    't_fuel': [600, 1200], # PAPER
+    't_mod': [550, 600],  # PAPER
+    't_clad': [570, 670], # OWN
+    'rho_mod': [0.74, 1.00], # PAPER
+    'boron_ppm': [0, 1000],  # PAPER
+    'geometry_radii': [0.39218, 0.45720], # MIT
+    'geometry_pitch': 1.25984,   # MIT      
   }
   
-  DATA_GEN_RUNS = 1 # Number of time to repeat the program
+  DATA_GEN_RUNS = 15 # Number of time to repeat the program
   NUM_WORKERS = 15   # Number of parallel program instances
 
   for i in range(DATA_GEN_RUNS):
