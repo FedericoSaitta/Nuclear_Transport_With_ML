@@ -26,13 +26,13 @@ def create_materials(config_dict):
   return fuel, clad, water
 
 # Note these are called volumes but as this is a 2D problem they are effectively areas
-def set_material_volumes(fuel, clad, water, radii=[0.42, 0.45], pitch=0.62):
+def set_material_volumes(fuel, clad, water, radii, pitch):
   fuel.volume  = math.pi * radii[0]**2
   clad.volume  = math.pi * (radii[1]**2 - radii[0]**2)
   water.volume = pitch**2 - math.pi * radii[1]**2
 
 
-def create_geometry(materials, radii=[0.42, 0.45], pitch=0.62):
+def create_geometry(materials, radii, pitch):
   pin_surfaces = [openmc.ZCylinder(r=r) for r in radii]
   pin_univ = openmc.model.pin(pin_surfaces, materials)
 

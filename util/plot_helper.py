@@ -49,8 +49,8 @@ def K_Effective(batches, keff, save_path="keff_plot.png"):
 #######################################
 ###### STEP LEVEL DATA PLOTTING #######
 #######################################
-def plot_generated_data(nuclides, data, save_folder): 
-  save_folder += '/plots'
+def plot_generated_data(nuclides, data, save_folder, worker_id): 
+  save_folder += f'/plots/worker{worker_id}'
   os.makedirs(save_folder , exist_ok=True)
   time = data['time_days']
   # Categorize nuclides
@@ -102,11 +102,12 @@ def plot_generated_data(nuclides, data, save_folder):
   plt.close()
 
   parameters = {
-    'power_W_g': "Reactor Power [W / g]",
-    'int_p_W': "Integrated Power [W / g]",
+    'power_W_g': "Reactor Power [W/g]",
+    'int_p_W': "Integrated Power [W/ g]",
     'fuel_temp_K': "Fuel Temperature [K]",
     'mod_temp_K': "Moderator Temperature [K]", 
-    'clad_temp_K': "Clad Temperature [K]"
+    'clad_temp_K': "Clad Temperature [K]", 
+    'mod_density_g_cm3': "Moderator Density [g/cm^3]"
   }
 
   for param, ylabel in parameters.items():
