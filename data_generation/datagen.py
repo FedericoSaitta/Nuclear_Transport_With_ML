@@ -36,7 +36,7 @@ def setup_paths(script_dir, worker_id):
   os.environ['HDF5_USE_FILE_LOCKING'] = 'FALSE'
   os.environ['OPENMC_CROSS_SECTIONS'] = str(openmc.config['cross_sections'])
   
-  chain_file = os.path.join(script_dir, "../data/chain_casl_pwr.xml")
+  chain_file = os.path.join(script_dir, "../data/simple_chain.xml")
   chain = openmc.deplete.Chain.from_xml(chain_file)
   
   return results_dir, chain
@@ -66,7 +66,8 @@ def generate_random_conditions(config):
     'fuel_temps': list(np.random.uniform(config['t_fuel'][0], config['t_fuel'][1], num_steps)),
     'mod_temps': list(np.random.uniform(config['t_mod'][0], config['t_mod'][1], num_steps)),
     'clad_temps': list(np.random.uniform(config['t_clad'][0], config['t_clad'][1], num_steps)),
-    'mod_densities': list(np.random.uniform(config['rho_mod'][0], config['rho_mod'][1], num_steps))
+    'mod_densities': list(np.random.uniform(config['rho_mod'][0], config['rho_mod'][1], num_steps)),
+    'boron_ppm': list(np.random.uniform(config['boron_ppm'][0], config['boron_ppm'][1], num_steps)) 
   }
 
 
@@ -94,6 +95,10 @@ def run_depletion_simulation(fuel, clad, water, materials, geometry, settings, c
     water.temperature = conditions['mod_temps'][i]
     clad.temperature = conditions['clad_temps'][i]
     water.set_density('g/cm3', conditions['mod_densities'][i])
+    # Remove old boron and add new
+    water.remove_element('B')
+    water.add_element('B', conditions['boron_ppm'][i] * 1e-6, 'wo')
+
     materials.export_to_xml(path=results_dir)
     
     model = openmc.model.Model(geometry, materials, settings)
@@ -122,7 +127,8 @@ def extract_results_data(results, conditions):
     'fuel_temp_K': conditions['fuel_temps'] + ['NaN'],
     'mod_temp_K': conditions['mod_temps'] + ['NaN'],
     'clad_temp_K': conditions['clad_temps'] + ['NaN'], 
-    'mod_density_g_cm3': conditions['mod_densities'] + ['NaN'] 
+    'mod_density_g_cm3': conditions['mod_densities'] + ['NaN'],
+    'boron_ppm': conditions['boron_ppm'] + ['NaN']
   }
   
   nuclides = results[0].index_nuc.keys()
@@ -164,7 +170,8 @@ def generate_data(config):
   data, nuclides = extract_results_data(results, conditions)
   save_results(data, script_dir, worker_id)
 
-  plot_helper.plot_generated_data(nuclides, data, save_folder=script_dir, worker_id=worker_id)
+  # Ensure to disable plotting for runs with huge number of tracked isotopes as these will overflow diagram
+  # plot_helper.plot_generated_data(nuclides, data, save_folder=script_dir, worker_id=worker_id)
 
 
 def create_worker_configs(base_config, num_workers):
@@ -204,15 +211,16 @@ if __name__ == "__main__":
     'delta_t': 10 * DAY_IN_SECONDS,
     'enrichment': 3.1,
     'fuel_density': 10.4,
-    'particles': 2_000,
-    'inactive': 5,
-    'batches': 20,
+    'particles': 10_000,
+    'inactive': 10,
+    'batches': 100,
     'temp_method': 'interpolation',
     'power': [0, 40],
     't_fuel': [600, 1200],
     't_mod': [550, 600],
     't_clad': [570, 670],
     'rho_mod': [0.74, 1.00],
+    'boron_ppm': [0, 1000],
     'geometry_radii': [0.39218, 0.45720],
     'geometry_pitch': 1.25984,            
   }

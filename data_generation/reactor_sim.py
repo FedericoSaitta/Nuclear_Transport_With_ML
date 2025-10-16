@@ -2,8 +2,7 @@
 import openmc
 import math
 
-def create_materials(config_dict):
-
+def create_materials(config_dict, initial_boron_ppm=0):
   enrichment = config_dict['enrichment']
   fuel_density = config_dict['fuel_density'] # in g/cm^3
 
@@ -18,8 +17,23 @@ def create_materials(config_dict):
   clad.set_density("g/cc", 6)
 
   water = openmc.Material(name="water")
-  water.add_element("O", 1)
-  water.add_element("H", 2)
+  
+  # Define base water composition in weight percent
+  h_weight_frac = 0.111894  # 2*1.008 / (2*1.008 + 15.999)
+  o_weight_frac = 0.888106  # 15.999 / (2*1.008 + 15.999)
+
+  boron_weight_frac = initial_boron_ppm * 1e-6 # Add boron content
+  
+  if boron_weight_frac > 0:
+    # Renormalize H and O to account for boron
+    water.add_element("H", h_weight_frac * (1 - boron_weight_frac), 'wo')
+    water.add_element("O", o_weight_frac * (1 - boron_weight_frac), 'wo')
+    water.add_element('B', boron_weight_frac, 'wo')
+  else:
+    # No boron, just pure water
+    water.add_element("H", h_weight_frac, 'wo')
+    water.add_element("O", o_weight_frac, 'wo')
+  
   water.set_density("g/cc", 1.0)
   water.add_s_alpha_beta("c_H_in_H2O")
   
