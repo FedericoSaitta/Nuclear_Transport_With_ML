@@ -36,7 +36,7 @@ def setup_paths(script_dir, worker_id):
   os.environ['HDF5_USE_FILE_LOCKING'] = 'FALSE'
   os.environ['OPENMC_CROSS_SECTIONS'] = str(openmc.config['cross_sections'])
   
-  chain_file = os.path.join(script_dir, "../data/simple_chain.xml")
+  chain_file = os.path.join(script_dir, "../data/chain_casl_pwr.xml")
   chain = openmc.deplete.Chain.from_xml(chain_file)
   
   return results_dir, chain
@@ -111,6 +111,13 @@ def run_depletion_simulation(fuel, clad, water, materials, geometry, settings, c
 def extract_results_data(results, conditions):
   time, k = results.get_keff()
   time /= DAY_IN_SECONDS
+
+  burnup = []
+  for i, res in enumerate(results):
+    if i == 0: burnup.append(0.0)
+    else:
+      bu = results.get_burnup(i, units='MWd/kg') # Burnup in MWd/kgU
+      burnup.append(bu)
   
   current_time = datetime.now().strftime("%Y%m%d_%H%M%S")
   home_dir = os.path.expanduser("~")
@@ -124,6 +131,7 @@ def extract_results_data(results, conditions):
     'k_eff_std': k[:, 1],
     'power_W_g': conditions['power'] + ['NaN'],
     'int_p_W': integrated_power + ['NaN'],
+    'burnup_MWd_kg': burnup,
     'fuel_temp_K': conditions['fuel_temps'] + ['NaN'],
     'mod_temp_K': conditions['mod_temps'] + ['NaN'],
     'clad_temp_K': conditions['clad_temps'] + ['NaN'], 
@@ -211,9 +219,9 @@ if __name__ == "__main__":
     'delta_t': 10 * DAY_IN_SECONDS,
     'enrichment': 3.1,
     'fuel_density': 10.4,
-    'particles': 10_000,
+    'particles': 5_000,
     'inactive': 10,
-    'batches': 100,
+    'batches': 50,
     'temp_method': 'interpolation',
     'power': [0, 40],
     't_fuel': [600, 1200],

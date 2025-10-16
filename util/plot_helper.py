@@ -108,7 +108,8 @@ def plot_generated_data(nuclides, data, save_folder, worker_id):
     'mod_temp_K': "Moderator Temperature [K]", 
     'clad_temp_K': "Clad Temperature [K]", 
     'mod_density_g_cm3': "Moderator Density [g/cm^3]",
-    'boron_ppm': "Boron concentration in Moderator [ppm]"
+    'boron_ppm': "Boron concentration in Moderator [ppm]",
+    'burnup_MWd_kg': "Burnup [MWd/kg]",
   }
 
   for param, ylabel in parameters.items():
