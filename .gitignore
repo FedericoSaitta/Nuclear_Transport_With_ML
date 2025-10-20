@@ -14,3 +14,4 @@ Makefile
 *.pyc
 *.log
 *.csv
+*.json
