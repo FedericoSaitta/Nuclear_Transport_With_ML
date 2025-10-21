@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 
-def plot_data_distributions(X, Y, col_index_map, target_name='Target', save_dir=None):
+def plot_data_distributions(X, Y, col_index_map, target_name='Target', save_dir=None, name='Raw_Data'):
   # Ensure Y is 1D
   if Y.ndim > 1 and Y.shape[1] == 1:
       Y = Y.flatten()
@@ -61,7 +61,7 @@ def plot_data_distributions(X, Y, col_index_map, target_name='Target', save_dir=
   plt.tight_layout()
   
   os.makedirs(save_dir, exist_ok=True)
-  filepath = os.path.join(save_dir, 'distribution_features.png')
+  filepath = os.path.join(save_dir, name + '_distribution_features.png')
   plt.savefig(filepath, dpi=300, bbox_inches='tight')
   print(f"Feature distributions saved to: {filepath}")
   plt.close()
