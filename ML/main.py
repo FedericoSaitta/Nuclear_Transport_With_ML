@@ -49,8 +49,8 @@ def main(path_to_data, plots_folder):
   X, Y = data_help.create_timeseries_targets(data_arr, col_index_map['time_days'], col_index_map, [target_name])
 
   # Plot variable correlations and distributions
-  #plot.plot_feature_target_correlations(X, Y, col_index_map, target_name=target_name, save_dir=plots_folder)
-  #plot.plot_data_distributions(X, Y, col_index_map, target_name='Target', save_dir=plots_folder, name='Raw_Data')
+  plot.plot_feature_target_correlations(X, Y, col_index_map, target_name=target_name, save_dir=plots_folder)
+  plot.plot_data_distributions(X, Y, col_index_map, target_name='Target', save_dir=plots_folder, name='Raw_Data')
 
   # Choose the device to do ML on: 
   device = torch.device("cuda" if torch.cuda.is_available() else "cpu") # and choosing device for training
@@ -85,9 +85,9 @@ def main(path_to_data, plots_folder):
   y_val_tensor   = torch.tensor(y_val, dtype=torch.float32)
   y_test_tensor  = torch.tensor(y_test, dtype=torch.float32)
   
-  Hidden_layers = [6, 6]
+  Hidden_layers = [128, 128]
   Drop_out = 0.1
-  LR = 0.0003
+  LR = 0.00003
   Weight_decay = 0.0
   LR_SCHEDULER_PATIENCE = 10
 
@@ -96,24 +96,22 @@ def main(path_to_data, plots_folder):
 
   optimizer = optim.AdamW(model.parameters(), lr=LR, weight_decay=Weight_decay)
   scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=LR_SCHEDULER_PATIENCE)
-  criterion = nn.MSELoss()
+  criterion = nn.L1Loss()
 
   train_dataset = TensorDataset(X_train_tensor, y_train_tensor)
   val_dataset   = TensorDataset(X_val_tensor, y_val_tensor)
   test_dataset  = TensorDataset(X_test_tensor, y_test_tensor)
 
-  Num_workers = 2
-  Train_batch = 64
-  Eval_batch = 64
+  Num_workers = 10
+  Train_batch = 2048
+  Eval_batch = 2048
 
   # Create DataLoader objects for training, validation, and testing in batches
   train_loader = DataLoader(train_dataset, batch_size=Train_batch,  shuffle=True, num_workers=Num_workers, persistent_workers= True, drop_last=True, pin_memory=True)
   val_loader   = DataLoader(val_dataset, batch_size=Eval_batch, shuffle=False, num_workers=Num_workers, persistent_workers= True, drop_last=True, pin_memory=True)
   test_loader  = DataLoader(test_dataset, batch_size=Eval_batch, shuffle=False, num_workers=Num_workers)
 
-
-
-  num_epochs = 400
+  num_epochs = 2_000
   patience = 5
   train_losses = []
   val_losses = []
@@ -127,9 +125,9 @@ def main(path_to_data, plots_folder):
       running_loss = 0.0
       for inputs, targets in train_loader:
           optimizer.zero_grad()
-          inputs_device = inputs.to(device)
-          targets_device = targets.to(device)
-          outputs = model(inputs_device)
+          inputs = inputs.to(device)
+          targets = targets.to(device)
+          outputs = model(inputs)
 
           if outputs.shape != targets.shape:
             targets = targets.view_as(outputs)
@@ -148,9 +146,9 @@ def main(path_to_data, plots_folder):
       val_loss = 0.0
       with torch.no_grad():
           for inputs, targets in val_loader:
-              inputs_device = inputs.to(device)
-              targets_device = targets.to(device)
-              outputs = model(inputs_device)
+              inputs = inputs.to(device)
+              targets = targets.to(device)
+              outputs = model(inputs)
 
               if outputs.shape != targets.shape:
                 targets = targets.view_as(outputs)
@@ -183,10 +181,109 @@ def main(path_to_data, plots_folder):
   # Load best model weights before testing or saving
   model.load_state_dict(best_model_state)
 
+  # ============== EVALUATION AND PLOTTING ============== #
+
+  # 1. Plot Training and Validation Loss
   import matplotlib.pyplot as plt
-  plt.plot(train_losses)
-  plt.plot(train_losses)
+
+  plt.figure(figsize=(10, 6))
+  plt.plot(train_losses, label='Training Loss', linewidth=2)
+  plt.plot(val_losses, label='Validation Loss', linewidth=2)
+  plt.xlabel('Epoch', fontsize=12)
+  plt.ylabel('Loss (MSE)', fontsize=12)
+  plt.title('Training and Validation Loss Over Time', fontsize=14)
+  plt.legend(fontsize=10)
+  plt.grid(True, alpha=0.3)
+  plt.tight_layout()
+  plt.savefig(os.path.join(plots_folder, 'training_loss.png'), dpi=300)
   plt.show()
+
+  # 2. Get predictions on test set
+  model.eval()
+  all_predictions = []
+  all_targets = []
+
+  with torch.no_grad():
+      for inputs, targets in test_loader:
+          inputs = inputs.to(device)
+          targets = targets.to(device)
+          outputs = model(inputs)
+          
+          if outputs.shape != targets.shape:
+              targets = targets.view_as(outputs)
+          
+          all_predictions.append(outputs.cpu().numpy())
+          all_targets.append(targets.cpu().numpy())
+
+  # Concatenate all batches
+  predictions = np.concatenate(all_predictions, axis=0).flatten()
+  actuals = np.concatenate(all_targets, axis=0).flatten()
+
+  # 3. Calculate metrics
+  from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+
+  mae = mean_absolute_error(actuals, predictions)
+  rmse = np.sqrt(mean_squared_error(actuals, predictions))
+  r2 = r2_score(actuals, predictions)
+
+  print(f"\n{'='*50}")
+  print(f"TEST SET PERFORMANCE")
+  print(f"{'='*50}")
+  print(f"Mean Absolute Error (MAE):  {mae:.4f}")
+  print(f"Root Mean Squared Error (RMSE): {rmse:.4f}")
+  print(f"R² Score: {r2:.4f}")
+  print(f"{'='*50}\n")
+
+  # 4. Predictions vs Actuals Scatter Plot
+  plt.figure(figsize=(10, 8))
+  plt.scatter(actuals, predictions, alpha=0.5, s=20, edgecolors='k', linewidth=0.5)
+
+  # Perfect prediction line
+  min_val = min(actuals.min(), predictions.min())
+  max_val = max(actuals.max(), predictions.max())
+  plt.plot([min_val, max_val], [min_val, max_val], 'r--', linewidth=2, label='Perfect Prediction')
+
+  plt.xlabel('Actual Values', fontsize=12)
+  plt.ylabel('Predicted Values', fontsize=12)
+  plt.title(f'Predictions vs Actual Values\nR² = {r2:.4f}, RMSE = {rmse:.4f}', fontsize=14)
+  plt.legend(fontsize=10)
+  plt.grid(True, alpha=0.3)
+  plt.tight_layout()
+  plt.savefig(os.path.join(plots_folder, 'predictions_vs_actual.png'), dpi=300)
+  plt.show()
+
+  # 5. Residual Plot
+  residuals = actuals - predictions
+
+  plt.figure(figsize=(10, 6))
+  plt.scatter(predictions, residuals, alpha=0.5, s=20, edgecolors='k', linewidth=0.5)
+  plt.axhline(y=0, color='r', linestyle='--', linewidth=2)
+  plt.xlabel('Predicted Values', fontsize=12)
+  plt.ylabel('Residuals (Actual - Predicted)', fontsize=12)
+  plt.title('Residual Plot', fontsize=14)
+  plt.grid(True, alpha=0.3)
+  plt.tight_layout()
+  plt.savefig(os.path.join(plots_folder, 'residuals.png'), dpi=300)
+  plt.show()
+
+  # 6. Residual Distribution
+  plt.figure(figsize=(10, 6))
+  plt.hist(residuals, bins=50, edgecolor='black', alpha=0.7)
+  plt.xlabel('Residuals', fontsize=12)
+  plt.ylabel('Frequency', fontsize=12)
+  plt.title(f'Residual Distribution\nMean: {residuals.mean():.4f}, Std: {residuals.std():.4f}', fontsize=14)
+  plt.axvline(x=0, color='r', linestyle='--', linewidth=2)
+  plt.grid(True, alpha=0.3)
+  plt.tight_layout()
+  plt.savefig(os.path.join(plots_folder, 'residual_distribution.png'), dpi=300)
+  plt.show()
+
+  # 7. Sample predictions table
+  print("\nSample Predictions (first 10):")
+  print(f"{'Actual':<12} {'Predicted':<12} {'Error':<12}")
+  print("-" * 36)
+  for i in range(min(10, len(actuals))):
+      print(f"{actuals[i]:<12.4f} {predictions[i]:<12.4f} {residuals[i]:<12.4f}")
 
 
 if (__name__ == '__main__'):
