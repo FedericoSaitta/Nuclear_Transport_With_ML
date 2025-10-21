@@ -27,5 +27,5 @@ if (__name__ == '__main__'):
   script_dir = os.path.dirname(os.path.abspath(__file__))
 
   # Build the path to the data file in a portable way
-  data_file_path = os.path.join(script_dir, "data", "data.csv")
+  data_file_path = os.path.join(script_dir, "data")
   main(data_file_path)

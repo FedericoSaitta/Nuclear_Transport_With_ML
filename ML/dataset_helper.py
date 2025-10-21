@@ -2,6 +2,8 @@
 import pandas as pd
 import numpy as np
 import re
+import glob
+import os
 
 def check_duplicates(pandas_df):
   # Get all columns except 'run_label'
@@ -40,14 +42,22 @@ def add_burnup_to_df(pandas_df):
   return pandas_df
 
 
-def read_data(path_to_data):
-  df = pd.read_csv(path_to_data)
-
-  check_duplicates(df)
-  df = remove_empty_columns(df)
-  df = add_burnup_to_df(df)
-
-  return df
+def read_data(folder_path):
+  # Get all CSV files in the folder
+  csv_files = glob.glob(os.path.join(folder_path, "*.csv"))
+  
+  # Read each CSV into a list of DataFrames
+  dfs = []
+  for file in csv_files:
+    df = pd.read_csv(file)
+    check_duplicates(df)
+    df = remove_empty_columns(df)
+    df = add_burnup_to_df(df)
+    dfs.append(df)
+  
+  combined_df = pd.concat(dfs, ignore_index=True)
+  
+  return combined_df
 
 
 def print_dataset_stats(df):
