@@ -64,7 +64,7 @@ def print_dataset_stats(df):
   numeric_cols = df.select_dtypes(include=[np.number]).columns
 
   # Select only columns that look like isotopes
-  isotope_cols = [col for col in numeric_cols if re.match(r'^[A-Za-z]+[0-9]+', col)]
+  isotope_cols = [col for col in numeric_cols if re.match(r'^[A-Za-z]+[0-9]+(_.*)?$', col)]
 
   first_row = df.iloc[0]
   nonzero_isotopes = [col for col in isotope_cols if first_row[col] != 0]
@@ -74,5 +74,39 @@ def print_dataset_stats(df):
   print("==========================")
 
 
+def remove_columns_from_data(df, keys):
+  cols_to_drop = [col for col in keys if col in df.columns]
+  if len(cols_to_drop) != len(keys): print("Warning: Some specified columns were not found in the DataFrame.")
+  new_df = df.drop(columns=cols_to_drop)
+  
+  print(f"New Number of columns: {new_df.shape[1]}")
+  return new_df
+
+  
+def keep_only_columns(df, keys):
+  existing_cols = [col for col in keys if col in df.columns]
+  if len(existing_cols) != len(keys): print("Warning: Some specified columns were not found in the DataFrame.")
+  new_df = df[existing_cols]
+  
+  print(f"New Number of columns: {new_df.shape[1]}")
+  return new_df
 
 
+def keep_only_elements(df, elements_to_keep):
+  numeric_cols = df.select_dtypes(include=[np.number]).columns
+
+  # Identify columns that look like elements (letters followed by digits)
+  element_cols = [col for col in numeric_cols if re.match(r'^[A-Za-z]+[0-9]+(_.*)?$', col)]
+
+  # Only keep the specified elements that exist in the DataFrame
+  elements_existing = [col for col in elements_to_keep if col in element_cols]
+  if len(elements_existing) != len(elements_to_keep):
+    print("Warning: Some specified elements were not found in the DataFrame.")
+
+  non_element_cols = [col for col in df.columns if col not in element_cols]
+
+  final_cols = non_element_cols + elements_existing # Combine non-element columns + selected elements
+  new_df = df[final_cols]
+
+  print(f"Kept {len(elements_existing)} elements and {len(non_element_cols)} non-element columns. Total columns: {new_df.shape[1]}")
+  return new_df
