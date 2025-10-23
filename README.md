@@ -19,12 +19,12 @@ cd ..
 ```
 To install the Python bindings
 ``` bash
-python3 -m pip install .
+python -m pip install .
 ``` 
 
 To test Python library installation:
 ``` bash
-python3 test.py
+python test.py
 ```
 
 ## Downloading Data
