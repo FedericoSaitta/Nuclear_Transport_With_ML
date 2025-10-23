@@ -3,19 +3,18 @@
 import os
 import pandas as pd
 import numpy as np
-import torch
 
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from sklearn.compose import ColumnTransformer
-
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
 # === PyTorch === #
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-from torch.utils.data import TensorDataset, DataLoader, WeightedRandomSampler
+from torch.utils.data import TensorDataset, DataLoader
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torchinfo import summary
 
@@ -24,8 +23,7 @@ from torchinfo import summary
 import dataset_helper as data_help
 import plot
 import model as MLmodel
-
-
+import metrics
 
 
 def main(path_to_data, plots_folder):
@@ -33,8 +31,9 @@ def main(path_to_data, plots_folder):
 
   data_help.print_dataset_stats(data_df)
 
-  print(data_df.columns)
-  data_df = data_help.keep_only_elements(data_df, ['U235'])
+  target_name = 'Xe135'
+  extra_name = 'U238'
+  data_df = data_help.filter_columns(data_df, [target_name,'U238', 'U235'], ['time_days','power_W_g','int_p_W'])
 
   print(data_df.columns)
 
@@ -42,14 +41,13 @@ def main(path_to_data, plots_folder):
 
   print(f"Data array shape: {data_arr.shape}")
   print(f"Data array: {data_arr}")
-  print(col_index_map)
+  print(f"Column Index Dictionary: {col_index_map}")
 
   # X are the inputs, Y are the targets, notably each col in the input is still defined by col_index_map
-  target_name = 'U235'
   X, Y = data_help.create_timeseries_targets(data_arr, col_index_map['time_days'], col_index_map, [target_name])
 
   # Plot variable correlations and distributions
-  plot.plot_feature_target_correlations(X, Y, col_index_map, target_name=target_name, save_dir=plots_folder)
+  plot.plot_correlation_matrix(X, Y, col_index_map, target_name=target_name, save_dir=plots_folder)
   plot.plot_data_distributions(X, Y, col_index_map, target_name='Target', save_dir=plots_folder, name='Raw_Data')
 
   # Choose the device to do ML on: 
@@ -58,22 +56,27 @@ def main(path_to_data, plots_folder):
 
   indices = np.arange(len(X)) # Get original indices
 
+  first_run = X[0:100, :]
+
   # First split: Train and Temp (80/20)
-  X_train, X_temp, y_train, y_temp, idx_train, idx_temp = train_test_split(
-      X, Y, indices, test_size=0.2, random_state=0, shuffle=True
-  )
+  X_train, X_temp, y_train, y_temp = train_test_split(X, Y, test_size=0.2, random_state=0, shuffle=True)
 
   # Second split: Val and Test from Temp (50/50 of Temp => 10% each of total)
-  X_val, X_test, y_val, y_test, idx_val, idx_test = train_test_split(
-      X_temp, y_temp, idx_temp, test_size=0.5, shuffle=True, random_state=0
-  )
-
+  X_val, X_test, y_val, y_test = train_test_split(X_temp, y_temp, test_size=0.5, shuffle=True, random_state=0)
+  
   # Scaling the data: 
   scaler =  MinMaxScaler()
 
   X_train = scaler.fit_transform(X_train)
   X_val   = scaler.transform(X_val)
   X_test  = scaler.transform(X_test)
+
+  first_run = scaler.transform(first_run)
+  
+  y_scaler = StandardScaler()
+  y_train = y_scaler.fit_transform(y_train.reshape(-1, 1)).flatten()
+  y_val = y_scaler.transform(y_val.reshape(-1, 1)).flatten()
+  y_test = y_scaler.transform(y_test.reshape(-1, 1)).flatten()
 
   plot.plot_data_distributions(X_train, y_train, col_index_map, target_name='Target', save_dir=plots_folder, name='Scaled_Data')
 
@@ -85,7 +88,7 @@ def main(path_to_data, plots_folder):
   y_val_tensor   = torch.tensor(y_val, dtype=torch.float32)
   y_test_tensor  = torch.tensor(y_test, dtype=torch.float32)
   
-  Hidden_layers = [128, 128]
+  Hidden_layers = [64, 64]
   Drop_out = 0.1
   LR = 0.00003
   Weight_decay = 0.0
@@ -96,7 +99,7 @@ def main(path_to_data, plots_folder):
 
   optimizer = optim.AdamW(model.parameters(), lr=LR, weight_decay=Weight_decay)
   scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=LR_SCHEDULER_PATIENCE)
-  criterion = nn.L1Loss()
+  criterion = nn.MSELoss()
 
   train_dataset = TensorDataset(X_train_tensor, y_train_tensor)
   val_dataset   = TensorDataset(X_val_tensor, y_val_tensor)
@@ -106,12 +109,14 @@ def main(path_to_data, plots_folder):
   Train_batch = 2048
   Eval_batch = 2048
 
+  drop_last = False
+
   # Create DataLoader objects for training, validation, and testing in batches
-  train_loader = DataLoader(train_dataset, batch_size=Train_batch,  shuffle=True, num_workers=Num_workers, persistent_workers= True, drop_last=True, pin_memory=True)
-  val_loader   = DataLoader(val_dataset, batch_size=Eval_batch, shuffle=False, num_workers=Num_workers, persistent_workers= True, drop_last=True, pin_memory=True)
+  train_loader = DataLoader(train_dataset, batch_size=Train_batch,  shuffle=True, num_workers=Num_workers, persistent_workers= True, drop_last=drop_last, pin_memory=True)
+  val_loader   = DataLoader(val_dataset, batch_size=Eval_batch, shuffle=False, num_workers=Num_workers, persistent_workers= True, drop_last=drop_last, pin_memory=True)
   test_loader  = DataLoader(test_dataset, batch_size=Eval_batch, shuffle=False, num_workers=Num_workers)
 
-  num_epochs = 2_000
+  num_epochs = 1_000
   patience = 5
   train_losses = []
   val_losses = []
@@ -184,109 +189,46 @@ def main(path_to_data, plots_folder):
   # ============== EVALUATION AND PLOTTING ============== #
 
   # 1. Plot Training and Validation Loss
-  import matplotlib.pyplot as plt
-
-  plt.figure(figsize=(10, 6))
-  plt.plot(train_losses, label='Training Loss', linewidth=2)
-  plt.plot(val_losses, label='Validation Loss', linewidth=2)
-  plt.xlabel('Epoch', fontsize=12)
-  plt.ylabel('Loss (MSE)', fontsize=12)
-  plt.title('Training and Validation Loss Over Time', fontsize=14)
-  plt.legend(fontsize=10)
-  plt.grid(True, alpha=0.3)
-  plt.tight_layout()
-  plt.savefig(os.path.join(plots_folder, 'training_loss.png'), dpi=300)
-  plt.show()
+  plot.plot_losses(train_losses, val_losses, plots_folder)
 
   # 2. Get predictions on test set
   model.eval()
-  all_predictions = []
-  all_targets = []
+  predictions, actuals = MLmodel.get_predictions(model, test_loader, device)
 
-  with torch.no_grad():
-      for inputs, targets in test_loader:
-          inputs = inputs.to(device)
-          targets = targets.to(device)
-          outputs = model(inputs)
-          
-          if outputs.shape != targets.shape:
-              targets = targets.view_as(outputs)
-          
-          all_predictions.append(outputs.cpu().numpy())
-          all_targets.append(targets.cpu().numpy())
-
-  # Concatenate all batches
-  predictions = np.concatenate(all_predictions, axis=0).flatten()
-  actuals = np.concatenate(all_targets, axis=0).flatten()
+  # Inverse transform predictions and actuals back to original scale
+  predictions = y_scaler.inverse_transform(predictions.reshape(-1, 1)).flatten()
+  actuals = y_scaler.inverse_transform(actuals.reshape(-1, 1)).flatten()
 
   # 3. Calculate metrics
-  from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
-
   mae = mean_absolute_error(actuals, predictions)
   rmse = np.sqrt(mean_squared_error(actuals, predictions))
   r2 = r2_score(actuals, predictions)
 
-  print(f"\n{'='*50}")
-  print(f"TEST SET PERFORMANCE")
-  print(f"{'='*50}")
-  print(f"Mean Absolute Error (MAE):  {mae:.4f}")
-  print(f"Root Mean Squared Error (RMSE): {rmse:.4f}")
-  print(f"R² Score: {r2:.4f}")
-  print(f"{'='*50}\n")
+  # 4. Predictions vs Actuals Scatter Plot and the residual plot and distribution
+  plot.plot_predictions_vs_actuals(actuals, predictions, mae, rmse, r2, plots_folder)
+  plot.plot_residuals_combined(actuals, predictions, plots_folder)
 
-  # 4. Predictions vs Actuals Scatter Plot
-  plt.figure(figsize=(10, 8))
-  plt.scatter(actuals, predictions, alpha=0.5, s=20, edgecolors='k', linewidth=0.5)
+  # 5. Calculate and plot feature importances, get the sorted feature names
+  feature_names = [key for key, _ in sorted(col_index_map.items(), key=lambda x: x[1])]
 
-  # Perfect prediction line
-  min_val = min(actuals.min(), predictions.min())
-  max_val = max(actuals.max(), predictions.max())
-  plt.plot([min_val, max_val], [min_val, max_val], 'r--', linewidth=2, label='Perfect Prediction')
+  importance_means, importance_stds, baseline_r2 = metrics.calculate_feature_importance(model, test_loader, device, n_repeats=10)
 
-  plt.xlabel('Actual Values', fontsize=12)
-  plt.ylabel('Predicted Values', fontsize=12)
-  plt.title(f'Predictions vs Actual Values\nR² = {r2:.4f}, RMSE = {rmse:.4f}', fontsize=14)
-  plt.legend(fontsize=10)
-  plt.grid(True, alpha=0.3)
-  plt.tight_layout()
-  plt.savefig(os.path.join(plots_folder, 'predictions_vs_actual.png'), dpi=300)
-  plt.show()
+  plot.plot_feature_importance(importance_means, importance_stds, feature_names, baseline_r2, plots_folder, n_top=20)
 
-  # 5. Residual Plot
-  residuals = actuals - predictions
+  # ===== PREDICTION COMPARISON ===== #
+  # Get ground truth in original scale
+  first_run_original = scaler.inverse_transform(first_run)
+  ground_truth = first_run_original[:, col_index_map[target_name]]
 
-  plt.figure(figsize=(10, 6))
-  plt.scatter(predictions, residuals, alpha=0.5, s=20, edgecolors='k', linewidth=0.5)
-  plt.axhline(y=0, color='r', linestyle='--', linewidth=2)
-  plt.xlabel('Predicted Values', fontsize=12)
-  plt.ylabel('Residuals (Actual - Predicted)', fontsize=12)
-  plt.title('Residual Plot', fontsize=14)
-  plt.grid(True, alpha=0.3)
-  plt.tight_layout()
-  plt.savefig(os.path.join(plots_folder, 'residuals.png'), dpi=300)
-  plt.show()
-
-  # 6. Residual Distribution
-  plt.figure(figsize=(10, 6))
-  plt.hist(residuals, bins=50, edgecolor='black', alpha=0.7)
-  plt.xlabel('Residuals', fontsize=12)
-  plt.ylabel('Frequency', fontsize=12)
-  plt.title(f'Residual Distribution\nMean: {residuals.mean():.4f}, Std: {residuals.std():.4f}', fontsize=14)
-  plt.axvline(x=0, color='r', linestyle='--', linewidth=2)
-  plt.grid(True, alpha=0.3)
-  plt.tight_layout()
-  plt.savefig(os.path.join(plots_folder, 'residual_distribution.png'), dpi=300)
-  plt.show()
-
-  # 7. Sample predictions table
-  print("\nSample Predictions (first 10):")
-  print(f"{'Actual':<12} {'Predicted':<12} {'Error':<12}")
-  print("-" * 36)
-  for i in range(min(10, len(actuals))):
-      print(f"{actuals[i]:<12.4f} {predictions[i]:<12.4f} {residuals[i]:<12.4f}")
+  # Get teacher-forced predictions
+  teacher_forced_preds = metrics.get_teacher_forced_predictions(model, first_run, y_scaler, device)
+  autoregressive_preds = metrics.get_autoregressive_predictions(model, first_run, col_index_map[target_name], scaler, y_scaler, device)
+  plot.plot_prediction_comparison(ground_truth, teacher_forced_preds, autoregressive_preds, target_name, plots_folder)
 
 
 if (__name__ == '__main__'):
+  
+
   plots_folder = './plots'
   # Get the folder of the current script
   script_dir = os.path.dirname(os.path.abspath(__file__))
