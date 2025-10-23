@@ -223,18 +223,6 @@ def plot_feature_importance(importance_means, importance_stds, feature_names,
   plt.tight_layout()
   plt.savefig(os.path.join(plots_folder, 'feature_importance.png'), dpi=300)
   plt.close()
-  
-  # Print feature importance table
-  print(f"\n{'='*70}")
-  print(f"FEATURE IMPORTANCE (Permutation-based)")
-  print(f"{'='*70}")
-  print(f"Baseline R² Score: {baseline_r2:.6f}")
-  print(f"{'='*70}")
-  print(f"{'Rank':<6} {'Feature':<25} {'Importance':<15} {'Std':<10}")
-  print("-" * 70)
-  for i, idx in enumerate(top_indices, 1):
-      print(f"{i:<6} {feature_names[idx]:<25} {importance_means[idx]:<15.6f} ±{importance_stds[idx]:<9.6f}")
-  print(f"{'='*70}\n")
 
 
 def plot_prediction_comparison(ground_truth, teacher_forced, autoregressive, 

@@ -4,15 +4,16 @@ import numpy as np
 import re
 import glob
 import os
+from loguru import logger
 
 def check_duplicates(pandas_df):
   # Get all columns except 'run_label'
   cols_to_check = [col for col in pandas_df.columns if col != 'run_label']
   
   if pandas_df.duplicated(subset=cols_to_check).any():
-    print("The DataFrame contains duplicate rows (ignoring run_label).")
+    logger.warning("The DataFrame contains duplicate rows (ignoring run_label).")
   else:
-    print("The DataFrame has no duplicate rows (ignoring run_label).")
+    logger.info("The DataFrame has no duplicate rows (ignoring run_label).")
 
 
 def remove_empty_columns(pandas_df):
@@ -24,8 +25,8 @@ def remove_empty_columns(pandas_df):
       removed_columns.append(col)
       pandas_df.drop(columns=col, inplace=True)
   
-  if removed_columns: print("Removed columns:", removed_columns)
-  else: print("No empty columns to remove.")
+  if removed_columns: logger.warning(f"Removed columns: {removed_columns}")
+  else: logger.info("No empty columns to remove.")
   
   return pandas_df
 
@@ -54,6 +55,7 @@ def read_data(folder_path, drop_run_label=True):
   # Read each CSV into a list of DataFrames
   dfs = []
   for file in csv_files:
+    logger.info(f'Reading data from: {file}')
     df = pd.read_csv(file)
     check_duplicates(df)
     df = remove_empty_columns(df)
@@ -95,23 +97,24 @@ def print_dataset_stats(df):
   
 
 def filter_columns(df, elements_to_keep, features_to_keep):
-  numeric_cols = df.select_dtypes(include=[np.number]).columns
+    import numpy as np, re
 
-  # Identify columns that look like elements (letters followed by digits)
-  element_cols = [col for col in numeric_cols if re.match(r'^[A-Za-z]+[0-9]+(_.*)?$', col)]
-  elements_existing = [col for col in elements_to_keep if col in element_cols]
+    # Keep all numeric columns
+    numeric_cols = df.select_dtypes(include=[np.number]).columns
+    element_cols = [col for col in numeric_cols if re.match(r'^[A-Za-z]+[0-9]+(_.*)?$', col)]
+    elements_existing = [col for col in elements_to_keep if col in element_cols]
 
-  if len(elements_existing) != len(elements_to_keep):
-    print("Warning: Some specified elements were not found in the DataFrame.")
+    # Keep features_to_keep regardless of type
+    non_element_to_keep = [col for col in features_to_keep if col in df.columns and col not in element_cols]
 
-  non_element_to_keep = [col for col in df.columns if col in features_to_keep]
+    if len(elements_existing) != len(elements_to_keep):
+        logger.warning("Warning: Some specified elements were not found in the DataFrame.")
 
-  final_cols = non_element_to_keep + elements_existing # Combine non-element columns + selected elements
-  new_df = df[final_cols]
+    final_cols = non_element_to_keep + elements_existing
+    new_df = df[final_cols]
 
-  print(f"Kept {len(elements_existing)} elements and {len(non_element_to_keep)} non-element columns. Total columns: {new_df.shape[1]}")
-  return new_df
-
+    logger.info(f"Kept {len(elements_existing)} elements and {len(non_element_to_keep)} state columns. Total columns: {new_df.shape[1]}")
+    return new_df
 
 def split_df(df):
   data_array = df.to_numpy()
