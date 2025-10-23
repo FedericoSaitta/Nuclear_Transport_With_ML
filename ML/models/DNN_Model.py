@@ -187,7 +187,24 @@ class DNN_Model(L.LightningModule):
 
         plot.plot_feature_importance(importance_means, importance_stds, feature_names, baseline_r2, self.result_dir, n_top=20)
 
-        
+
+         # ===== PREDICTION COMPARISON ===== #
+        # Get ground truth in original scale
+        first_run = datamodule.first_run
+        col_index_map = datamodule.col_index_map
+        target_name = datamodule.target
+        input_scaler = datamodule.input_scaler
+        y_scaler = datamodule.target_scaler
+
+
+        first_run_original =input_scaler.inverse_transform(first_run)
+        ground_truth = first_run_original[:, col_index_map[target_name]]
+
+        # Get teacher-forced predictions
+        teacher_forced_preds = metrics.get_teacher_forced_predictions(self.model, first_run, y_scaler, self.device)
+        autoregressive_preds = metrics.get_autoregressive_predictions(self.model, first_run, col_index_map[target_name], input_scaler, y_scaler, self.device)
+        plot.plot_prediction_comparison(ground_truth, teacher_forced_preds, autoregressive_preds, target_name, self.result_dir)
+
         for metric in [self.mae, self.mse, self.r2]: metric.reset()
 
     def configure_optimizers(self):

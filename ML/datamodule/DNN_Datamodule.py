@@ -14,6 +14,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "utils")
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "models")))
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "datamodule")))
 import dataset_helper as data_help
+import plot
 
 class DNN_Datamodule(L.LightningDataModule):
     def __init__(self, cfg_object: DictConfig):
@@ -66,8 +67,9 @@ class DNN_Datamodule(L.LightningDataModule):
         self.col_index_map = col_index_map
 
         X, Y = data_help.create_timeseries_targets(data_arr, col_index_map['time_days'], col_index_map, [self.target])
+        plot.plot_data_distributions(X, Y, col_index_map, target_name='Target', save_dir=self.result_dir, name='Raw_Data')
 
-        first_run = X[0:100, :]
+        self.first_run = X[0:100, :]
 
         # First split: Train and Temp (80/20)
         X_train, X_temp, y_train, y_temp = train_test_split(X, Y, test_size=0.2, random_state=0, shuffle=True)
@@ -77,20 +79,21 @@ class DNN_Datamodule(L.LightningDataModule):
         
 
         # Scaling the data: 
-        scaler =  MinMaxScaler()
+        self.input_scaler =  MinMaxScaler()
 
-        X_train = scaler.fit_transform(X_train)
-        X_val   = scaler.transform(X_val)
-        X_test  = scaler.transform(X_test)
+        X_train = self.input_scaler.fit_transform(X_train)
+        X_val   = self.input_scaler.transform(X_val)
+        X_test  = self.input_scaler.transform(X_test)
 
-        first_run = scaler.transform(first_run)
+        self.first_run = self.input_scaler.transform(self.first_run)
         
         self.target_scaler = StandardScaler()
         y_train = self.target_scaler.fit_transform(y_train.reshape(-1, 1)).flatten()
         y_val = self.target_scaler.transform(y_val.reshape(-1, 1)).flatten()
         y_test = self.target_scaler.transform(y_test.reshape(-1, 1)).flatten()
-        
 
+        plot.plot_data_distributions(X_train, y_train, col_index_map, target_name='Target', save_dir=self.result_dir, name='Scaled_Data')
+        
         X_train_tensor = torch.nan_to_num(torch.tensor(X_train, dtype=torch.float32), nan=-1)
         X_val_tensor   = torch.nan_to_num(torch.tensor(X_val, dtype=torch.float32), nan=-1)
         X_test_tensor  = torch.nan_to_num(torch.tensor(X_test, dtype=torch.float32), nan=-1)
