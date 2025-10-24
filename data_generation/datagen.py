@@ -1,5 +1,5 @@
 import os
-os.environ["OMP_NUM_THREADS"] = "3"
+os.environ["OMP_NUM_THREADS"] = "1"
 
 HOUR_IN_SECONDS = 3600
 DAY_IN_SECONDS = 24 * HOUR_IN_SECONDS
@@ -18,7 +18,6 @@ import multiprocessing as mp
 from reactor_sim import create_materials, set_material_volumes, create_geometry, create_settings, update_water_composition
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../util")))
 import plot_helper
-
 
 def setup_logging(script_dir):
   log_file = os.path.join(script_dir, 'log.log')
@@ -174,14 +173,16 @@ def generate_data(config):
 
   # Ensure to disable plotting for runs with huge number of tracked isotopes as these will overflow diagram
   # plot_helper.plot_generated_data(nuclides, data, save_folder=script_dir, worker_id=worker_id)
-
-
+  
+import uuid
 def create_worker_configs(base_config, num_workers):
   random.seed()
   configs = []
-  for worker_id in range(1, num_workers + 1):
+  
+  for i in range(1, num_workers + 1):
     config = base_config.copy()
-    config['worker_id'] = worker_id
+    # Create absolutely unique worker ID
+    config['worker_id'] = f"{i}_{uuid.uuid4().hex[:8]}"
     config['seed'] = random.randint(1, 2**31 - 1)
     configs.append(config)
   return configs
@@ -207,7 +208,16 @@ def run_parallel_simulations(configs):
     raise
 
 
+import argparse
 if __name__ == "__main__":
+  # Set up argument parser
+  parser = argparse.ArgumentParser(description='Run parallel depletion simulations')
+  parser.add_argument('-n', '--runs', type=int, default=4,
+                      help='Number of data generation runs (default: 4)')
+  parser.add_argument('-c', '--cores', type=int, default=16,
+                      help='Number of parallel worker processes (default: 16)')
+  args = parser.parse_args()
+  
   base_config = {
     'num_depl_steps': 100,
     'delta_t': 10 * DAY_IN_SECONDS,
@@ -227,8 +237,8 @@ if __name__ == "__main__":
     'geometry_pitch': 1.25984,   # MIT      
   }
   
-  DATA_GEN_RUNS = 15 # Number of time to repeat the program
-  NUM_WORKERS = 15   # Number of parallel program instances
+  DATA_GEN_RUNS = args.runs  # Number of times to repeat the program
+  NUM_WORKERS = args.cores   # Number of parallel program instances
 
   for i in range(DATA_GEN_RUNS):
     configs = create_worker_configs(base_config, NUM_WORKERS)
