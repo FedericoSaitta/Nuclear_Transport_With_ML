@@ -7,7 +7,6 @@ DAY_IN_SECONDS = 24 * HOUR_IN_SECONDS
 import openmc
 import openmc.deplete
 import time
-from loguru import logger
 from datetime import datetime
 import numpy as np
 import pandas as pd
@@ -18,11 +17,6 @@ import multiprocessing as mp
 from reactor_sim import create_materials, set_material_volumes, create_geometry, create_settings, update_water_composition
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../util")))
 import plot_helper
-
-def setup_logging(script_dir):
-  log_file = os.path.join(script_dir, 'log.log')
-  logger.remove()
-  logger.add(log_file, format="{time:YYYY-MM-DD HH:mm:ss} | {level} | {message}", level="INFO")
 
 
 def setup_paths(script_dir, worker_id):
@@ -88,7 +82,7 @@ def run_depletion_simulation(fuel, clad, water, materials, geometry, settings, c
   num_steps = len(conditions['time_steps'])
   
   for i in range(num_steps):
-    logger.info(f"Worker {worker_id}** Step {i+1}/{num_steps}")
+    print(f"Worker {worker_id}** Step {i+1}/{num_steps}")
     
     fuel.temperature = conditions['fuel_temps'][i]
     water.temperature = conditions['mod_temps'][i]
@@ -155,7 +149,7 @@ def generate_data(config):
   setup_logging(script_dir)
   results_dir, chain = setup_paths(script_dir, worker_id)
   
-  logger.info(f"Worker {worker_id}** Using seed: {config['seed']}")
+  print(f"Worker {worker_id}** Using seed: {config['seed']}")
   np.random.seed(config['seed'])
   
   fuel, clad, water, materials, geometry, settings = setup_reactor_model(config, results_dir)
