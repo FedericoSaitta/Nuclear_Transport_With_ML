@@ -146,7 +146,6 @@ def generate_data(config):
   worker_id = config['worker_id']
   script_dir = os.path.dirname(os.path.abspath(__file__))
   
-  setup_logging(script_dir)
   results_dir, chain = setup_paths(script_dir, worker_id)
   
   print(f"Worker {worker_id}** Using seed: {config['seed']}")
