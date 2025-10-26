@@ -18,11 +18,8 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 import torchmetrics
 
 import sys
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "utils")))
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "models")))
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "datamodule")))
-import plot as plot
-import metrics
+from ML.utils import plot
+from ML.utils import metrics
 
 # This modules will contain the Machine Learning Models used
 import numpy as np

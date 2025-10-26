@@ -19,11 +19,11 @@ dataset:
 
 model:
   name: "SimpleDNN"
-  layers: [64, 64]          # hidden layers
+  layers: [64,64]          # hidden layers
   dropout_probability: 0.1  # dropout applied between layers
 
 train:
-  learning_rate: 3.0e-4
+  learning_rate: 1.0e-5
   weight_decay: 0.0
   lr_scheduler_patience: 10
   num_epochs: 1000

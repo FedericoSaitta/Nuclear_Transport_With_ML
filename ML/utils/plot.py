@@ -6,8 +6,7 @@ import seaborn as sns
 
 def plot_correlation_matrix(X, Y, col_index_map, target_name='Target', save_dir=None, name='correlation_matrix'):
   # Ensure Y is 1D
-  if Y.ndim > 1 and Y.shape[1] == 1:
-      Y = Y.flatten()
+  if Y.ndim > 1 and Y.shape[1] == 1: Y = Y.flatten()
   
   # Get sorted feature names
   feature_list = sorted(col_index_map.items(), key=lambda x: x[1])
@@ -38,15 +37,15 @@ def plot_correlation_matrix(X, Y, col_index_map, target_name='Target', save_dir=
   
   # Add correlation values to cells
   for i in range(len(all_names)):
-      for j in range(len(all_names)):
-          corr_val = corr_matrix[i, j]
-          # Choose text color based on background
-          text_color = 'white' if abs(corr_val) > 0.5 else 'black'
-          # Only show values for off-diagonal or if significant
-          if i != j or abs(corr_val) > 0.01:
-              ax.text(j, i, f'{corr_val:.2f}', 
-                      ha='center', va='center', 
-                      color=text_color, fontsize=7)
+    for j in range(len(all_names)):
+      corr_val = corr_matrix[i, j]
+      # Choose text color based on background
+      text_color = 'white' if abs(corr_val) > 0.5 else 'black'
+      # Only show values for off-diagonal or if significant
+      if i != j or abs(corr_val) > 0.01:
+        ax.text(j, i, f'{corr_val:.2f}', 
+                ha='center', va='center', 
+                color=text_color, fontsize=7)
   
   # Highlight the target row and column
   target_idx = len(all_names) - 1
@@ -71,14 +70,13 @@ def plot_correlation_matrix(X, Y, col_index_map, target_name='Target', save_dir=
   sorted_indices = np.argsort(np.abs(target_corrs))[::-1]
   
   for rank, idx in enumerate(sorted_indices[:10], 1):
-      print(f"{rank:2d}. {feature_names[idx]:25s} | {target_corrs[idx]:+.4f}")
+    print(f"{rank:2d}. {feature_names[idx]:25s} | {target_corrs[idx]:+.4f}")
   print(f"{'='*60}\n")
   
 
 def plot_data_distributions(X, Y, col_index_map, target_name='Target', save_dir=None, name='Raw_Data'):
   # Ensure Y is 1D
-  if Y.ndim > 1 and Y.shape[1] == 1:
-      Y = Y.flatten()
+  if Y.ndim > 1 and Y.shape[1] == 1: Y = Y.flatten()
   
   # Get all feature names sorted by index
   feature_list = sorted(col_index_map.items(), key=lambda x: x[1])
@@ -95,36 +93,36 @@ def plot_data_distributions(X, Y, col_index_map, target_name='Target', save_dir=
   
   # Plot histogram for each feature
   for idx, (feature_name, col_idx) in enumerate(feature_list):
-      ax = axes[idx]
-      data = X[:, col_idx]
-      
-      # Create histogram
-      n, bins, patches = ax.hist(data, bins=50, alpha=0.7, edgecolor='black', linewidth=0.5)
-      
-      # Color code if this is the target feature
-      if feature_name == target_name:
-          for patch in patches:
-              patch.set_facecolor('red')
-              patch.set_alpha(0.7)
-          ax.set_title(f'{feature_name} (TARGET at t)', fontweight='bold', color='red')
-      else:
-          for patch in patches:
-              patch.set_facecolor('steelblue')
-          ax.set_title(feature_name)
-      
-      ax.set_xlabel('Value')
-      ax.set_ylabel('Frequency')
-      ax.grid(True, alpha=0.3)
-      
-      # Add statistics
-      mean_val = np.mean(data)
-      std_val = np.std(data)
-      ax.axvline(mean_val, color='red', linestyle='--', linewidth=2, label=f'Mean: {mean_val:.3e}')
-      ax.legend(fontsize=8)
+    ax = axes[idx]
+    data = X[:, col_idx]
+    
+    # Create histogram
+    n, bins, patches = ax.hist(data, bins=50, alpha=0.7, edgecolor='black', linewidth=0.5)
+    
+    # Color code if this is the target feature
+    if feature_name == target_name:
+      for patch in patches:
+        patch.set_facecolor('red')
+        patch.set_alpha(0.7)
+      ax.set_title(f'{feature_name} (TARGET at t)', fontweight='bold', color='red')
+    else:
+      for patch in patches:
+        patch.set_facecolor('steelblue')
+      ax.set_title(feature_name)
+    
+    ax.set_xlabel('Value')
+    ax.set_ylabel('Frequency')
+    ax.grid(True, alpha=0.3)
+    
+    # Add statistics
+    mean_val = np.mean(data)
+    std_val = np.std(data)
+    ax.axvline(mean_val, color='red', linestyle='--', linewidth=2, label=f'Mean: {mean_val:.3e}')
+    ax.legend(fontsize=8)
   
   # Hide unused subplots
   for idx in range(n_features, len(axes)):
-      axes[idx].axis('off')
+    axes[idx].axis('off')
   
   plt.suptitle('Feature Distributions (Input Features at time t)', 
                 fontsize=16, fontweight='bold', y=1.0)
