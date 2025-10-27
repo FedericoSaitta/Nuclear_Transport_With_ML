@@ -1,5 +1,35 @@
+import sys
+import argparse
+
+# Parse arguments FIRST, before any other imports
+parser = argparse.ArgumentParser(description='Run parallel depletion simulations')
+parser.add_argument('-n', '--runs', type=int, default=4,
+                    help='Number of data generation runs (default: 4)')
+parser.add_argument('-c', '--cores', type=int, default=16,
+                    help='Number of parallel worker processes (default: 16)')
+parser.add_argument('-f', '--file', type=str, default='chain_casl_pwr.xml',
+                    help='Depletion chain file name (default: chain_casl_pwr.xml)')
+parser.add_argument('-t', '--threads', type=int, default=1,
+                    help='Number of OpenMP threads per worker (default: 1)')
+parser.add_argument('-s', '--seed', type=int, default=None,
+                    help='Master random seed for reproducibility (default: None for random)')
+
+# Only parse args if this is the main script
+if __name__ == "__main__":
+    args = parser.parse_args()
+else:
+    # Default values if imported as module
+    class DefaultArgs:
+        threads = 1
+        runs = 4
+        cores = 16
+        file = 'chain_casl_pwr.xml'
+        seed = None
+    args = DefaultArgs()
+
+# Set environment variable BEFORE importing OpenMC
 import os
-os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["OMP_NUM_THREADS"] = str(args.threads)
 
 HOUR_IN_SECONDS = 3600
 DAY_IN_SECONDS = 24 * HOUR_IN_SECONDS
@@ -10,16 +40,18 @@ import time
 from datetime import datetime
 import numpy as np
 import pandas as pd
-import sys
 import random
 import multiprocessing as mp
+
 
 from reactor_sim import create_materials, set_material_volumes, create_geometry, create_settings, update_water_composition
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../util")))
 import plot_helper
 
+HOUR_IN_SECONDS = 3600
+DAY_IN_SECONDS = 24 * HOUR_IN_SECONDS
 
-def setup_paths(script_dir, worker_id):
+def setup_paths(script_dir, worker_id, chain_filename):
   openmc_exec_path = os.path.abspath(os.path.join(script_dir, "../external/openmc/build/bin/openmc"))
   results_dir = os.path.abspath(os.path.join(script_dir, "results", f"worker_{worker_id}"))
   os.makedirs(results_dir, exist_ok=True)
@@ -29,7 +61,7 @@ def setup_paths(script_dir, worker_id):
   os.environ['HDF5_USE_FILE_LOCKING'] = 'FALSE'
   os.environ['OPENMC_CROSS_SECTIONS'] = str(openmc.config['cross_sections'])
   
-  chain_file = os.path.join(script_dir, "../data/chain_casl_pwr.xml")
+  chain_file = os.path.join(script_dir, "../data", chain_filename)
   chain = openmc.deplete.Chain.from_xml(chain_file)
   
   return results_dir, chain
@@ -146,8 +178,9 @@ def generate_data(config):
   worker_id = config['worker_id']
   script_dir = os.path.dirname(os.path.abspath(__file__))
   
-  results_dir, chain = setup_paths(script_dir, worker_id)
-  
+  results_dir, chain = setup_paths(script_dir, worker_id, config['chain_file'])
+
+  print(f"Using depletion file: {config['chain_file']}")
   print(f"Worker {worker_id}** Using seed: {config['seed']}")
   np.random.seed(config['seed'])
   
@@ -168,8 +201,14 @@ def generate_data(config):
   # plot_helper.plot_generated_data(nuclides, data, save_folder=script_dir, worker_id=worker_id)
   
 import uuid
-def create_worker_configs(base_config, num_workers):
-  random.seed()
+def create_worker_configs(base_config, num_workers, master_seed=None):
+  if master_seed is not None:
+    random.seed(master_seed)
+    print(f"Using master seed: {master_seed}")
+  else:
+    random.seed()
+    print("Using random seed (no master seed specified)")
+  
   configs = []
   
   for i in range(1, num_workers + 1):
@@ -201,40 +240,33 @@ def run_parallel_simulations(configs):
     raise
 
 
-import argparse
+
 if __name__ == "__main__":
-  # Set up argument parser
-  parser = argparse.ArgumentParser(description='Run parallel depletion simulations')
-  parser.add_argument('-n', '--runs', type=int, default=4,
-                      help='Number of data generation runs (default: 4)')
-  parser.add_argument('-c', '--cores', type=int, default=16,
-                      help='Number of parallel worker processes (default: 16)')
-  args = parser.parse_args()
-  
   base_config = {
     'num_depl_steps': 100,
     'delta_t': 10 * DAY_IN_SECONDS,
-    'enrichment': 3.1, # BEAVRS
-    'fuel_density': 10.4, # BEAVRS
+    'enrichment': 3.1,
+    'fuel_density': 10.4,
     'particles': 5_000,
     'inactive': 10,
     'batches': 50,
     'temp_method': 'interpolation',
-    'power': [0, 41.4],      # PAPER
-    't_fuel': [600, 1200], # PAPER
-    't_mod': [550, 600],  # PAPER
-    't_clad': [570, 670], # OWN
-    'rho_mod': [0.74, 1.00], # PAPER
-    'boron_ppm': [0, 1000],  # PAPER
-    'geometry_radii': [0.39218, 0.45720], # MIT
-    'geometry_pitch': 1.25984,   # MIT      
+    'power': [0, 41.4],
+    't_fuel': [600, 1200],
+    't_mod': [550, 600],
+    't_clad': [570, 670],
+    'rho_mod': [0.74, 1.00],
+    'boron_ppm': [0, 1000],
+    'geometry_radii': [0.39218, 0.45720],
+    'geometry_pitch': 1.25984,
+    'chain_file': args.file,
   }
   
-  DATA_GEN_RUNS = args.runs  # Number of times to repeat the program
-  NUM_WORKERS = args.cores   # Number of parallel program instances
+  DATA_GEN_RUNS = args.runs
+  NUM_WORKERS = args.cores
 
   for i in range(DATA_GEN_RUNS):
-    configs = create_worker_configs(base_config, NUM_WORKERS)
+    configs = create_worker_configs(base_config, NUM_WORKERS, master_seed=args.seed)
     
     start_time = time.perf_counter()
     run_parallel_simulations(configs)

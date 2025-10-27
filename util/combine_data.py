@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 # This Python script combines the data files produced by the data generation Python file.
 
 import os
