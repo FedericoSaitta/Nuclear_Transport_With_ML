@@ -13,6 +13,11 @@ parser.add_argument('-t', '--threads', type=int, default=1,
                     help='Number of OpenMP threads per worker (default: 1)')
 parser.add_argument('-s', '--seed', type=int, default=None,
                     help='Master random seed for reproducibility (default: None for random)')
+parser.add_argument('-m', '--temp-method', type=str, default='interpolation',
+                    choices=['interpolation', 'nearest'],
+                    help='Temperature interpolation method for cross sections (default: interpolation)')
+parser.add_argument('-w', '--use-wmp', action='store_true',
+                    help='Use Windowed Multipole for on-the-fly Doppler broadening (overrides temp-method)')
 
 # Only parse args if this is the main script
 if __name__ == "__main__":
@@ -25,6 +30,8 @@ else:
         cores = 16
         file = 'chain_casl_pwr.xml'
         seed = None
+        temp_method = 'interpolation'
+        use_wmp = False
     args = DefaultArgs()
 
 # Set environment variable BEFORE importing OpenMC
@@ -51,7 +58,7 @@ import plot_helper
 HOUR_IN_SECONDS = 3600
 DAY_IN_SECONDS = 24 * HOUR_IN_SECONDS
 
-def setup_paths(script_dir, worker_id, chain_filename):
+def setup_paths(script_dir, worker_id, chain_filename, use_wmp=False):
   openmc_exec_path = os.path.abspath(os.path.join(script_dir, "../external/openmc/build/bin/openmc"))
   results_dir = os.path.abspath(os.path.join(script_dir, "results", f"worker_{worker_id}"))
   os.makedirs(results_dir, exist_ok=True)
@@ -60,6 +67,15 @@ def setup_paths(script_dir, worker_id, chain_filename):
   os.environ['OPENMC_EXEC'] = openmc_exec_path
   os.environ['HDF5_USE_FILE_LOCKING'] = 'FALSE'
   os.environ['OPENMC_CROSS_SECTIONS'] = str(openmc.config['cross_sections'])
+  
+  # Set up WMP library if enabled
+  if use_wmp:
+    wmp_path = os.path.join(script_dir, "../data/wmp")
+    if os.path.exists(wmp_path):
+      os.environ['OPENMC_MULTIPOLE_LIBRARY'] = wmp_path
+      print(f"Worker {worker_id}** Using WMP library from: {wmp_path}")
+    else:
+      print(f"Worker {worker_id}** WARNING: WMP enabled but library not found at {wmp_path}")
   
   chain_file = os.path.join(script_dir, "../data", chain_filename)
   chain = openmc.deplete.Chain.from_xml(chain_file)
@@ -76,6 +92,11 @@ def setup_reactor_model(config, results_dir):
   settings = create_settings(config)
   settings.verbosity = 1
   settings.output = {'tallies': False}
+  
+  # Set temperature method only if not using WMP
+  if not config.get('use_wmp', False):
+    # Temperature method is only relevant when using tabulated cross sections
+    pass  # temp_method is already set in create_settings
   
   geometry.export_to_xml(path=results_dir)
   settings.export_to_xml(path=results_dir)
@@ -178,10 +199,17 @@ def generate_data(config):
   worker_id = config['worker_id']
   script_dir = os.path.dirname(os.path.abspath(__file__))
   
-  results_dir, chain = setup_paths(script_dir, worker_id, config['chain_file'])
+  results_dir, chain = setup_paths(script_dir, worker_id, config['chain_file'], 
+                                    use_wmp=config.get('use_wmp', False))
 
   print(f"Using depletion file: {config['chain_file']}")
   print(f"Worker {worker_id}** Using seed: {config['seed']}")
+  
+  if config.get('use_wmp', False):
+    print(f"Worker {worker_id}** Using WMP for on-the-fly Doppler broadening")
+  else:
+    print(f"Worker {worker_id}** Using temperature method: {config['temp_method']}")
+  
   np.random.seed(config['seed'])
   
   fuel, clad, water, materials, geometry, settings = setup_reactor_model(config, results_dir)
@@ -250,7 +278,8 @@ if __name__ == "__main__":
     'particles': 5_000,
     'inactive': 10,
     'batches': 50,
-    'temp_method': 'interpolation',
+    'temp_method': args.temp_method,
+    'use_wmp': args.use_wmp,
     'power': [0, 41.4],
     't_fuel': [600, 1200],
     't_mod': [550, 600],
