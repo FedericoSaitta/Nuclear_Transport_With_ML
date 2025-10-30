@@ -4,15 +4,18 @@ import numpy as np
 import re
 import glob
 import os
+from loguru import logger
 
 def check_duplicates(pandas_df):
   # Get all columns except 'run_label'
   cols_to_check = [col for col in pandas_df.columns if col != 'run_label']
   
   if pandas_df.duplicated(subset=cols_to_check).any():
-    print("The DataFrame contains duplicate rows (ignoring run_label).")
+    logger.warning("The DataFrame contains duplicate rows (ignoring run_label).")
+    return True
   else:
-    print("The DataFrame has no duplicate rows (ignoring run_label).")
+    logger.info("The DataFrame has no duplicate rows (ignoring run_label).")
+    return False
 
 
 def remove_empty_columns(pandas_df):
@@ -24,8 +27,8 @@ def remove_empty_columns(pandas_df):
       removed_columns.append(col)
       pandas_df.drop(columns=col, inplace=True)
   
-  if removed_columns: print("Removed columns:", removed_columns)
-  else: print("No empty columns to remove.")
+  if removed_columns: logger.warning(f"Removed columns: {removed_columns}")
+  else: logger.info("No empty columns to remove.")
   
   return pandas_df
 
@@ -54,8 +57,8 @@ def read_data(folder_path, drop_run_label=True):
   # Read each CSV into a list of DataFrames
   dfs = []
   for file in csv_files:
+    logger.info(f'Reading data from: {file}')
     df = pd.read_csv(file)
-    check_duplicates(df)
     df = remove_empty_columns(df)
     df = add_burnup_to_df(df)
     
@@ -66,20 +69,17 @@ def read_data(folder_path, drop_run_label=True):
     dfs.append(df)
   
   combined_df = pd.concat(dfs, ignore_index=True)
-  
+  check_duplicates(combined_df) # Checking if entire dataset has duplicates
+
   return combined_df
 
 
 def print_dataset_stats(df):
-  print("=== Dataset Statistics ===")
+  logger.info("=== Dataset Statistics ===")
   
   # Number of rows and columns
-  print(f"Number of rows (time steps): {df.shape[0]}")
-  print(f"Number of columns: {df.shape[1]}")
-  
-  # Column names
-  print("\nColumns:")
-  print(df.columns.tolist())
+  logger.info(f"Number of rows (time steps): {df.shape[0]}")
+  logger.info(f"Number of columns: {df.shape[1]}")
 
   numeric_cols = df.select_dtypes(include=[np.number]).columns
 
@@ -89,53 +89,36 @@ def print_dataset_stats(df):
   first_row = df.iloc[0]
   nonzero_isotopes = [col for col in isotope_cols if first_row[col] != 0]
 
-  print("Isotopes with non-zero concentration at t=0:", nonzero_isotopes)
-
-  print("==========================")
-
-
-def remove_columns_from_data(df, keys):
-  cols_to_drop = [col for col in keys if col in df.columns]
-  if len(cols_to_drop) != len(keys): print("Warning: Some specified columns were not found in the DataFrame.")
-  new_df = df.drop(columns=cols_to_drop)
+  logger.info(f"Number of element columns: {len(isotope_cols)}")
+  logger.info(f"Number of state columns: {len(df.columns) - len(isotope_cols)}")
+  logger.info("Isotopes with non-zero concentration at t=0:", nonzero_isotopes)
   
-  print(f"New Number of columns: {new_df.shape[1]}")
-  return new_df
 
-  
-def keep_only_columns(df, keys):
-  existing_cols = [col for col in keys if col in df.columns]
-  if len(existing_cols) != len(keys): print("Warning: Some specified columns were not found in the DataFrame.")
-  new_df = df[existing_cols]
-  
-  print(f"New Number of columns: {new_df.shape[1]}")
-  return new_df
-
-
-def keep_only_elements(df, elements_to_keep):
+def filter_columns(df, elements_mask, features_mask):
+  # Keep all numeric columns
   numeric_cols = df.select_dtypes(include=[np.number]).columns
-
-  # Identify columns that look like elements (letters followed by digits)
   element_cols = [col for col in numeric_cols if re.match(r'^[A-Za-z]+[0-9]+(_.*)?$', col)]
+  elements_to_keep = [col for col in elements_mask if col in element_cols]
 
-  # Only keep the specified elements that exist in the DataFrame
-  elements_existing = [col for col in elements_to_keep if col in element_cols]
-  if len(elements_existing) != len(elements_to_keep):
-    print("Warning: Some specified elements were not found in the DataFrame.")
+  # Keep features_mask regardless of type
+  non_element_to_keep = [col for col in features_mask if col in df.columns and col not in element_cols]
 
-  non_element_cols = [col for col in df.columns if col not in element_cols]
+  # Error checking
+  if len(elements_to_keep) != len(elements_mask):
+    logger.warning("Warning: Some specified elements were not found in the DataFrame.")
+  if len(non_element_to_keep) != len(features_mask):
+    logger.warning("Warning: Some specified features were not found in the DataFrame.")
 
-  final_cols = non_element_cols + elements_existing # Combine non-element columns + selected elements
+  final_cols = non_element_to_keep + elements_to_keep
   new_df = df[final_cols]
 
-  print(f"Kept {len(elements_existing)} elements and {len(non_element_cols)} non-element columns. Total columns: {new_df.shape[1]}")
+  logger.info(f"Kept {len(elements_to_keep)} elements and {len(non_element_to_keep)} state columns. Total columns: {new_df.shape[1]}")
   return new_df
 
 
 def split_df(df):
   data_array = df.to_numpy()
   col_index_map = {col: idx for idx, col in enumerate(df.columns)}
-  
   return data_array, col_index_map
 
 
@@ -165,9 +148,9 @@ def create_timeseries_targets(data, time_col_idx, element_dict, target_elements)
   X = data[valid_indices]
   y = data[valid_indices + 1][:, target_indices]
   
-  print(f"Detected {len(run_end_indices)} runs")
-  print(f"Created {len(X)} training samples")
-  print(f"Input shape: {X.shape} | Target shape: {y.shape}")
-  print(f"Targets: {target_elements}")
+  logger.info(f"Detected {len(run_end_indices)} runs")
+  logger.info(f"Created {len(X)} training samples")
+  logger.info(f"Input shape: {X.shape} | Target shape: {y.shape}")
+  logger.info(f"Targets: {target_elements}")
   
   return X, y

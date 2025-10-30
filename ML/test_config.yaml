@@ -1,0 +1,40 @@
+dataset:
+  path_to_data: "generated_data"
+  target: "U235"
+  state_features: ["time_days", "power_W_g", "int_p_W", 'fuel_temp_K', 'mod_temp_K', 
+                   'clad_temp_K', 'mod_density_g_cm3', 'boron_ppm', 'burnup_MWd_per_kg']
+  input_elements: ["U238", "U235"]
+
+  # Scaling configuration
+  input_element_scaling: "Standard"  # Scaling of input element concentrations
+  input_state_scaling: "MinMax"      # Scaling of input state variables
+  target_scaling: "Standard"         # Scaling of target values
+
+  # Data loader configuration
+  train:
+    batch_size: 2048
+  val:
+    batch_size: 2048
+
+model:
+  name: "SimpleDNN"
+  layers: [64,64]         
+  dropout_probability: 0.1
+
+train:
+  learning_rate: 1.0e-5
+  weight_decay: 0.0
+  lr_scheduler_patience: 10
+  num_epochs: 1000
+  early_stopping_patience: 5
+
+  dropout_probability: 0.1   
+
+output:
+  result_dir: "results/${model.name}/"
+
+runtime:
+  device: "cuda"  # or "cpu"
+  seed: 42
+  drop_last: false
+  num_workers: 14

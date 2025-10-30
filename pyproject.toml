@@ -1,0 +1,13 @@
+[project]
+name = "Nuclear_Transport_With_ML"
+version = "0.1.0"
+description = "Nuclear Transport and ML package"
+authors = [{ name = "Abel Castaneda Rodriguez and Federico Saitta" }]
+requires-python = ">=3.11"
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["ML"]
