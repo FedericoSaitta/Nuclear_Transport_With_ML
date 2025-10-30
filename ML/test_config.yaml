@@ -1,9 +1,10 @@
 dataset:
   path_to_data: "generated_data"
-  target: "U235"
+
   state_features: ["time_days", "power_W_g", "int_p_W", 'fuel_temp_K', 'mod_temp_K', 
                    'clad_temp_K', 'mod_density_g_cm3', 'boron_ppm', 'burnup_MWd_per_kg']
-  input_elements: ["U238", "U235"]
+  input_elements: ["Th232"]
+  target: "Th232"
 
   # Scaling configuration
   input_element_scaling: "Standard"  # Scaling of input element concentrations
@@ -20,13 +21,16 @@ model:
   name: "SimpleDNN"
   layers: [64,64]         
   dropout_probability: 0.1
+  activation: "relu"  # Options: relu, tanh, sigmoid, leaky_relu, elu, gelu
+  output_activation: "none"  # Options: none, sigmoid, tanh, softplus
 
 train:
+  loss: "mse"
   learning_rate: 1.0e-5
-  weight_decay: 0.0
+  weight_decay: 5.0e-4
   lr_scheduler_patience: 10
   num_epochs: 1000
-  early_stopping_patience: 5
+  early_stopping_patience: 20
 
   dropout_probability: 0.1   
 
@@ -34,7 +38,7 @@ output:
   result_dir: "results/${model.name}/"
 
 runtime:
-  device: "cuda"  # or "cpu"
+  device: "cuda"
   seed: 42
   drop_last: false
   num_workers: 14

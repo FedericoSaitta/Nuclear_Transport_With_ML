@@ -29,25 +29,50 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class SimpleDNN(nn.Module):
-  def __init__(self, n_inputs, hidden_layers, dropout_prob=0.1):
-    super(SimpleDNN, self).__init__()
+    def __init__(self, n_inputs, hidden_layers, dropout_prob=0.1, 
+                 activation='relu', output_activation='none'):
+        super(SimpleDNN, self).__init__()
+        
+        layer_sizes = [n_inputs] + hidden_layers + [1]
+        
+        self.layers = nn.ModuleList([
+            nn.Linear(in_size, out_size)
+            for in_size, out_size in zip(layer_sizes[:-1], layer_sizes[1:])
+        ])
+        
+        self.dropout = nn.Dropout(p=dropout_prob)
+        
+        # Activation function mapping
+        self.activation_fn = self._get_activation(activation)
+        self.output_activation_fn = self._get_activation(output_activation)
+    
+    def _get_activation(self, activation):
+        """Get activation function by name"""
+        activations = {
+            'relu': nn.ReLU(),
+            'tanh': nn.Tanh(),
+            'sigmoid': nn.Sigmoid(),
+            'leaky_relu': nn.LeakyReLU(0.1),
+            'elu': nn.ELU(),
+            'gelu': nn.GELU(),
+            'selu': nn.SELU(),
+            'softplus': nn.Softplus(),
+            'none': nn.Identity()
+        }
+        return activations.get(activation.lower(), nn.ReLU())
+    
+    def forward(self, x):
+        # Hidden layers with activation and dropout
+        for layer in self.layers[:-1]:
+            x = layer(x)
+            x = self.activation_fn(x)
+            x = self.dropout(x)
+        
+        # Output layer
+        y = self.layers[-1](x)
+        y = self.output_activation_fn(y)
+        return y
 
-    # Complete layer sizes: [n_inputs, hidden1, hidden2, ..., 1]
-    layer_sizes = [n_inputs] + hidden_layers + [1]
-
-    # Create a list of Linear layers
-    self.layers = nn.ModuleList([
-      nn.Linear(in_size, out_size)
-      for in_size, out_size in zip(layer_sizes[:-1], layer_sizes[1:])
-    ])
-
-    self.dropout = nn.Dropout(p=dropout_prob)
-
-  def forward(self, x):
-    for layer in self.layers[:-1]:
-      x = self.dropout(F.relu(layer(x)))
-    y = self.layers[-1](x)
-    return y
 
 class DNN_Model(L.LightningModule):
   def __init__(self, config_object : DictConfig):
@@ -55,12 +80,14 @@ class DNN_Model(L.LightningModule):
 
     self.dropout_prob = config_object.train.dropout_probability
     self.NN_layers = config_object.model.layers
-
+    self.activation = config_object.model.activation
+    self.output_activation = config_object.model.output_activation
+    
     self.learning_rate = config_object.train.learning_rate
     self.weight_decay = config_object.train.weight_decay
-
-    # Change this in the future
-    self.loss_fn = nn.MSELoss()
+    
+    # Make loss function configurable too
+    self.loss_fn = self._get_loss_fn(config_object.train.loss)
 
     self.lr_scheduler_patience = config_object.train.lr_scheduler_patience
     
@@ -88,7 +115,13 @@ class DNN_Model(L.LightningModule):
     
     # Create the model based 
     input_dim = dm.train_dataset.tensors[0].shape[1]
-    self.model = SimpleDNN(input_dim, self.NN_layers, self.dropout_prob)
+    self.model = SimpleDNN(
+      input_dim, 
+      self.NN_layers, 
+      self.dropout_prob,
+      self.activation,
+      self.output_activation
+    )
 
   # Gets called for each train batch
   def training_step(self, batch, batch_idx):
@@ -96,7 +129,7 @@ class DNN_Model(L.LightningModule):
     y_hat = self.model(x).squeeze()
     loss = self.loss_fn(y_hat, y)
 
-    self.log('train_loss', loss, on_epoch=True, prog_bar=True)
+    self.log('train_loss', loss, on_step=False, on_epoch=True, prog_bar=True)
     self.log('lr', self.optimizers().param_groups[0]['lr'], on_epoch=True, prog_bar=True)
     return loss
 
@@ -172,6 +205,11 @@ class DNN_Model(L.LightningModule):
     plot.plot_predictions_vs_actuals(y_true_test, y_pred_test, self.mae.compute().item(), np.sqrt(self.mse.compute().item()), self.r2.compute().item(), self.result_dir)
     plot.plot_residuals_combined(y_true_test, y_pred_test, self.result_dir)
 
+
+    # Compute MARE
+    ARE = np.abs(y_true_test - y_pred_test) / np.max(y_true_test)
+    logger.info(f'MARE: {sum(ARE) / len(ARE)}')
+
     self.log('Mean Absolute Error', self.mae.compute())
     self.log('Mean Squared Error', self.mse.compute())
     self.log('R-squared coefficient', self.r2.compute())
@@ -218,3 +256,12 @@ class DNN_Model(L.LightningModule):
           'monitor': 'val_loss', # metric to monitor for ReduceLROnPlateau
       }
     }
+  
+  def _get_loss_fn(self, loss_name):
+    losses = {
+      'mse': nn.MSELoss(),
+      'mae': nn.L1Loss(),
+      'huber': nn.HuberLoss(),
+      'smooth_l1': nn.SmoothL1Loss()
+    }
+    return losses[loss_name.lower()]

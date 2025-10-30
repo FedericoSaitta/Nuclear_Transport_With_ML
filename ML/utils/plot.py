@@ -218,26 +218,76 @@ def plot_feature_importance(importance_means, importance_stds, feature_names,
   logger.info(f"{metric_name} Imporances plot saved to: {filepath}")
 
 
-def plot_prediction_comparison(ground_truth, teacher_forced, autoregressive, 
-                               target_name, plots_folder):
-  time_indices = np.arange(len(ground_truth))
-  prediction_indices = time_indices[1:len(autoregressive) + 1]
+# In your plotting utility file (ML/utils/plot.py)
+
+def plot_prediction_comparison(ground_truth, teacher_forced_preds, autoregressive_preds, target_name, result_dir):
+  # Calculate MARE for both prediction methods
+  mare_teacher = np.mean(np.abs(ground_truth[1:] - teacher_forced_preds) / np.max(ground_truth[1:]))
+  mare_autoregressive = np.mean(np.abs(ground_truth[1:] - autoregressive_preds) / np.max(ground_truth[1:]))
   
-  plt.figure(figsize=(14, 7))
-  plt.plot(time_indices, ground_truth, 'b-o', label='Ground Truth', 
-            linewidth=2, markersize=4)
-  plt.plot(prediction_indices, teacher_forced[:len(autoregressive)], 'r--s', 
-            label='Teacher Forced', linewidth=2, markersize=4, alpha=0.7)
-  plt.plot(prediction_indices, autoregressive, 'g--^', 
-            label='Autoregressive', linewidth=2, markersize=4, alpha=0.7)
+  # Create figure with two rows: main plot and residuals
+  fig = plt.figure(figsize=(16, 9))
   
-  plt.xlabel('Time Step', fontsize=12)
-  plt.ylabel(target_name, fontsize=12)
-  plt.title('Prediction Comparison: Teacher Forced vs Autoregressive', fontsize=14)
-  plt.legend(fontsize=10)
-  plt.grid(True, alpha=0.3)
+  # Create grid: 2 rows with height ratio 3:1 (main plot and residuals)
+  gs = fig.add_gridspec(2, 1, height_ratios=[3, 1], hspace=0.05)
+  
+  # Main predictions plot
+  ax1 = fig.add_subplot(gs[0])
+  time_steps = np.arange(len(ground_truth))
+  
+  # Plot ground truth as solid line
+  ax1.plot(time_steps, ground_truth, 'k-', label='Ground Truth', 
+           linewidth=2.5, alpha=0.9, zorder=1)
+  
+  # Teacher-forced with square markers
+  ax1.plot(time_steps[1:], teacher_forced_preds, 'b-', 
+           linewidth=2, alpha=0.8, zorder=2)
+  ax1.plot(time_steps[1:], teacher_forced_preds, 
+           's', color='blue', markersize=5, markerfacecolor='blue', 
+           markeredgecolor='white', markeredgewidth=0.5,
+           label=f'Teacher-Forced (MARE: {mare_teacher:.4f})', zorder=3)
+  
+  # Autoregressive with triangle markers
+  ax1.plot(time_steps[1:], autoregressive_preds, 'r-', 
+           linewidth=2, alpha=0.8, zorder=2)
+  ax1.plot(time_steps[1:], autoregressive_preds, 
+           '^', color='red', markersize=5, markerfacecolor='red', 
+           markeredgecolor='white', markeredgewidth=0.5,
+           label=f'Autoregressive (MARE: {mare_autoregressive:.4f})', zorder=3)
+  
+  ax1.set_ylabel(f'{target_name}', fontsize=14, fontweight='bold')
+  ax1.legend(loc='best', fontsize=12, framealpha=0.95, edgecolor='black')
+  ax1.grid(True, alpha=0.4, linestyle='--', linewidth=0.8)
+  ax1.set_title(f'{target_name} - Prediction Comparison', fontsize=16, fontweight='bold', pad=15)
+  ax1.tick_params(labelbottom=False, labelsize=11)
+  
+  # Residuals plot (both methods)
+  ax2 = fig.add_subplot(gs[1], sharex=ax1)
+  residuals_teacher = ground_truth[1:] - teacher_forced_preds
+  residuals_autoregressive = ground_truth[1:] - autoregressive_preds
+  
+  # Plot residuals with thicker lines and markers
+  ax2.plot(time_steps[1:], residuals_teacher, 'b-', linewidth=1.8, alpha=0.8, zorder=2)
+  ax2.plot(time_steps[1:], residuals_teacher, 
+           's', color='blue', markersize=5, markerfacecolor='blue', 
+           markeredgecolor='white', markeredgewidth=0.5, 
+           label='Teacher-Forced', zorder=3)
+  
+  ax2.plot(time_steps[1:], residuals_autoregressive, 'r-', linewidth=1.8, alpha=0.8, zorder=2)
+  ax2.plot(time_steps[1:], residuals_autoregressive, 
+           '^', color='red', markersize=6, markerfacecolor='red', 
+           markeredgecolor='white', markeredgewidth=0.5,
+           label='Autoregressive', zorder=3)
+  
+  ax2.axhline(y=0, color='k', linestyle='--', linewidth=1.5, alpha=0.6, zorder=1)
+  ax2.set_ylabel('Residuals', fontsize=12, fontweight='bold')
+  ax2.set_xlabel('Time Steps', fontsize=14, fontweight='bold')
+  ax2.grid(True, alpha=0.4, linestyle='--', linewidth=0.8)
+  ax2.legend(loc='best', fontsize=10, framealpha=0.95, edgecolor='black')
+  ax2.tick_params(labelsize=11)
+  
+  # Save the figure
   plt.tight_layout()
-  filepath = os.path.join(plots_folder, 'prediction_comparison.png')
-  plt.savefig(os.path.join(plots_folder, 'prediction_comparison.png'), dpi=300)
+  plt.savefig(os.path.join(result_dir, f'{target_name}_prediction_comparison.png'), 
+              dpi=300, bbox_inches='tight')
   plt.close()
-  logger.info(f"Model Prediction Comparison plot saved to: {filepath}")
