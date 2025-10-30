@@ -3,6 +3,7 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
+from loguru import logger
 
 def plot_correlation_matrix(X, Y, col_index_map, target_name='Target', save_dir=None, name='correlation_matrix'):
   # Ensure Y is 1D
@@ -56,22 +57,10 @@ def plot_correlation_matrix(X, Y, col_index_map, target_name='Target', save_dir=
   plt.tight_layout()
   
   # Save plot
-  os.makedirs(save_dir, exist_ok=True)
   filepath = os.path.join(save_dir, f'{name}.png')
   plt.savefig(filepath, dpi=300, bbox_inches='tight')
-  print(f"Correlation matrix saved to: {filepath}")
   plt.close()
-  
-  # Print top correlations with target
-  print(f"\n{'='*60}")
-  print(f"TOP CORRELATIONS WITH {target_name}(t+1)")
-  print(f"{'='*60}")
-  target_corrs = corr_matrix[target_idx, :-1]  # Exclude self-correlation
-  sorted_indices = np.argsort(np.abs(target_corrs))[::-1]
-  
-  for rank, idx in enumerate(sorted_indices[:10], 1):
-    print(f"{rank:2d}. {feature_names[idx]:25s} | {target_corrs[idx]:+.4f}")
-  print(f"{'='*60}\n")
+  logger.info(f"Correlation matrix saved to: {filepath}")
   
 
 def plot_data_distributions(X, Y, col_index_map, target_name='Target', save_dir=None, name='Raw_Data'):
@@ -116,7 +105,6 @@ def plot_data_distributions(X, Y, col_index_map, target_name='Target', save_dir=
     
     # Add statistics
     mean_val = np.mean(data)
-    std_val = np.std(data)
     ax.axvline(mean_val, color='red', linestyle='--', linewidth=2, label=f'Mean: {mean_val:.3e}')
     ax.legend(fontsize=8)
   
@@ -128,11 +116,10 @@ def plot_data_distributions(X, Y, col_index_map, target_name='Target', save_dir=
                 fontsize=16, fontweight='bold', y=1.0)
   plt.tight_layout()
   
-  os.makedirs(save_dir, exist_ok=True)
   filepath = os.path.join(save_dir, name + '_distribution_features.png')
   plt.savefig(filepath, dpi=300, bbox_inches='tight')
-  print(f"Feature distributions saved to: {filepath}")
   plt.close()
+  logger.info(f"Feature distributions saved to: {filepath}")
 
 
 def plot_losses(train_losses, val_losses, save_dir):
@@ -145,7 +132,10 @@ def plot_losses(train_losses, val_losses, save_dir):
   plt.legend(fontsize=10)
   plt.grid(True, alpha=0.3)
   plt.tight_layout()
-  plt.savefig(os.path.join(save_dir, 'training_loss.png'), dpi=300)
+  filepath = os.path.join(save_dir, 'training_loss.png')
+  plt.savefig(filepath, dpi=300)
+  plt.close()
+  logger.info(f"Train and Validation Losses saved to: {filepath}")
 
 
 def plot_predictions_vs_actuals(actuals, predictions, mae, rmse, r2, plots_folder):
@@ -159,13 +149,14 @@ def plot_predictions_vs_actuals(actuals, predictions, mae, rmse, r2, plots_folde
   
   plt.xlabel('Actual Values', fontsize=12)
   plt.ylabel('Predicted Values', fontsize=12)
-  plt.title(f'Predictions vs Actual Values\nR² = {r2:.4f} | RMSE = {rmse:.4f} | MAE = {mae:.4f}', 
-            fontsize=14)
+  plt.title(f'Predictions vs Actual Values\nR² = {r2:.4f} | RMSE = {rmse:.4f} | MAE = {mae:.4f}', fontsize=14)
   plt.legend(fontsize=10)
   plt.grid(True, alpha=0.3)
   plt.tight_layout()
-  plt.savefig(os.path.join(plots_folder, 'predictions_vs_actual.png'), dpi=300)
+  filepath = os.path.join(plots_folder, 'predictions_vs_actual.png')
+  plt.savefig(filepath, dpi=300)
   plt.close()
+  logger.info(f"Model predictions saved to: {filepath}")
 
 
 def plot_residuals_combined(actuals, predictions, plots_folder):
@@ -191,11 +182,13 @@ def plot_residuals_combined(actuals, predictions, plots_folder):
   axes[1].grid(True, alpha=0.3)
   
   plt.tight_layout()
-  plt.savefig(os.path.join(plots_folder, 'residuals_combined.png'), dpi=300)
+  filepath = os.path.join(plots_folder, 'residuals_combined.png')
+  plt.savefig(filepath, dpi=300)
   plt.close()
+  logger.info(f"Model prediction residuals saved to: {filepath}")
 
 def plot_feature_importance(importance_means, importance_stds, feature_names, 
-                          baseline_r2, plots_folder, n_top=20):
+                          baseline_r2, plots_folder, metric_name, n_top=20):
   n_features = len(importance_means)
   
   # Sort features by importance
@@ -212,15 +205,17 @@ def plot_feature_importance(importance_means, importance_stds, feature_names,
             align='center', alpha=0.8, edgecolor='black',
             color=colors)
   plt.yticks(range(n_top), [feature_names[i] for i in top_indices])
-  plt.xlabel('Permutation Importance (Decrease in R²)', fontsize=12)
+  plt.xlabel(f'Permutation Importance {metric_name}', fontsize=12)
   plt.ylabel('Features', fontsize=12)
-  plt.title(f'Top {n_top} Most Important Features\nBaseline R² = {baseline_r2:.4f}', 
+  plt.title(f'Top {n_top} Most Important Features\nBaseline{metric_name} = {baseline_r2:.4f}', 
             fontsize=14)
   plt.gca().invert_yaxis()
   plt.grid(True, alpha=0.3, axis='x')
   plt.tight_layout()
-  plt.savefig(os.path.join(plots_folder, 'feature_importance.png'), dpi=300)
+  filepath = os.path.join(plots_folder, f'{metric_name}_importance.png')
+  plt.savefig(filepath, dpi=300)
   plt.close()
+  logger.info(f"{metric_name} Imporances plot saved to: {filepath}")
 
 
 def plot_prediction_comparison(ground_truth, teacher_forced, autoregressive, 
@@ -242,5 +237,7 @@ def plot_prediction_comparison(ground_truth, teacher_forced, autoregressive,
   plt.legend(fontsize=10)
   plt.grid(True, alpha=0.3)
   plt.tight_layout()
+  filepath = os.path.join(plots_folder, 'prediction_comparison.png')
   plt.savefig(os.path.join(plots_folder, 'prediction_comparison.png'), dpi=300)
   plt.close()
+  logger.info(f"Model Prediction Comparison plot saved to: {filepath}")

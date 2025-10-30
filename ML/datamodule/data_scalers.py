@@ -1,0 +1,96 @@
+from sklearn.preprocessing import (
+  MinMaxScaler,
+  StandardScaler,
+  RobustScaler,
+  MaxAbsScaler,
+  Normalizer,
+  QuantileTransformer,
+  PowerTransformer
+)
+from sklearn.compose import ColumnTransformer
+from loguru import logger
+
+# Returns a scaler object based on user's input
+def get_scaler(scaler_name):
+  scaler_map = {
+    'minmax': MinMaxScaler(),
+    'standard': StandardScaler(),
+    'robust': RobustScaler(),
+    'maxabs': MaxAbsScaler(),
+    'normalizer': Normalizer(),
+    'quantile': QuantileTransformer(),
+    'power': PowerTransformer()
+  }
+  
+  scaler_name_lower = scaler_name.lower().strip()
+  
+  if scaler_name_lower in scaler_map: return scaler_map[scaler_name_lower]
+  else:
+    available = ', '.join(scaler_map.keys())
+    raise ValueError(f"Unknown scaler: '{scaler_name}'. Available scalers: {available}")
+
+
+def print_transformer_summary(column_transformer, col_index_map):
+  """Print a summary of which scaler is applied to which columns."""
+  logger.info("ColumnTransformer Summary:")
+  
+  # Create reverse mapping: index -> column name
+  idx_to_col = {idx: col for col, idx in col_index_map.items()}
+  
+  for name, transformer, columns in column_transformer.transformers:
+    if transformer == 'passthrough': 
+      logger.error(f'Col {name} is being passed through')
+      scaler_name = 'Passthrough (no scaling)'
+    else: scaler_name = transformer.__class__.__name__
+    
+    col_names = [idx_to_col.get(col, f"index_{col}") for col in columns]
+    logger.info(f"  {scaler_name}: {col_names}") 
+
+
+def create_column_transformer(scaler_dict, col_index_map):
+  transformers = []
+  
+  # Sort columns by their index to maintain original order
+  sorted_cols = sorted(col_index_map.items(), key=lambda x: x[1])
+  
+  for col_name, col_idx in sorted_cols:
+    if col_name in scaler_dict:
+      scaler = scaler_dict[col_name]          # Apply the specified scaler
+      transformers.append((f"{col_name}", scaler, [col_idx]))
+    else:
+      raise ValueError(f'Column: {col_name} with index {col_idx} is not in the scaler dictionary')
+  
+  # Create ColumnTransformer
+  column_transformer = ColumnTransformer(
+    transformers=transformers,
+    sparse_threshold=0,  # Return dense array, 
+    remainder='passthrough', 
+    verbose_feature_names_out=False
+  )
+  print_transformer_summary(column_transformer, col_index_map)
+  
+  return column_transformer
+
+def inverse_transform_column_transformer(column_transformer, X):
+  X_original = X.copy()
+  
+  for name, transformer, columns in column_transformer.transformers_:
+    if transformer == 'passthrough':
+      continue # These columns are already in original scale, do nothing
+    else:
+        if isinstance(columns, list): col_indices = columns
+        else: col_indices = [columns]
+        
+        # Extract data for these columns
+        col_data = X[:, col_indices]
+        
+        # Inverse transform
+        if hasattr(transformer, 'inverse_transform'):
+          col_data_original = transformer.inverse_transform(col_data)
+          
+          # Put back into array
+          X_original[:, col_indices] = col_data_original
+        else: 
+          logger.error(f"Could not compute inverse transform for col {columns} with {name} scaler")
+
+  return X_original

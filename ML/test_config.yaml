@@ -6,21 +6,20 @@ dataset:
   input_elements: ["U238", "U235"]
 
   # Scaling configuration
-  input_scaling: "MinMaxScaler"      # or "StandardScaler"
-  target_scaling: "StandardScaler"   # typically StandardScaler for regression targets
+  input_element_scaling: "Standard"  # Scaling of input element concentrations
+  input_state_scaling: "MinMax"      # Scaling of input state variables
+  target_scaling: "Standard"         # Scaling of target values
 
   # Data loader configuration
   train:
     batch_size: 2048
-    num_workers: 10
   val:
     batch_size: 2048
-    num_workers: 10
 
 model:
   name: "SimpleDNN"
-  layers: [64,64]          # hidden layers
-  dropout_probability: 0.1  # dropout applied between layers
+  layers: [64,64]         
+  dropout_probability: 0.1
 
 train:
   learning_rate: 1.0e-5
@@ -37,6 +36,5 @@ output:
 runtime:
   device: "cuda"  # or "cpu"
   seed: 42
-  persistent_workers: true
   drop_last: false
-  pin_memory: true
+  num_workers: 14

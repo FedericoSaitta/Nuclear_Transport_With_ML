@@ -12,8 +12,10 @@ def check_duplicates(pandas_df):
   
   if pandas_df.duplicated(subset=cols_to_check).any():
     logger.warning("The DataFrame contains duplicate rows (ignoring run_label).")
+    return True
   else:
     logger.info("The DataFrame has no duplicate rows (ignoring run_label).")
+    return False
 
 
 def remove_empty_columns(pandas_df):
@@ -57,7 +59,6 @@ def read_data(folder_path, drop_run_label=True):
   for file in csv_files:
     logger.info(f'Reading data from: {file}')
     df = pd.read_csv(file)
-    check_duplicates(df)
     df = remove_empty_columns(df)
     df = add_burnup_to_df(df)
     
@@ -68,20 +69,17 @@ def read_data(folder_path, drop_run_label=True):
     dfs.append(df)
   
   combined_df = pd.concat(dfs, ignore_index=True)
-  
+  check_duplicates(combined_df) # Checking if entire dataset has duplicates
+
   return combined_df
 
 
 def print_dataset_stats(df):
-  print("=== Dataset Statistics ===")
+  logger.info("=== Dataset Statistics ===")
   
   # Number of rows and columns
-  print(f"Number of rows (time steps): {df.shape[0]}")
-  print(f"Number of columns: {df.shape[1]}")
-  
-  # Column names
-  print("\nColumns:")
-  print(df.columns.tolist())
+  logger.info(f"Number of rows (time steps): {df.shape[0]}")
+  logger.info(f"Number of columns: {df.shape[1]}")
 
   numeric_cols = df.select_dtypes(include=[np.number]).columns
 
@@ -91,30 +89,32 @@ def print_dataset_stats(df):
   first_row = df.iloc[0]
   nonzero_isotopes = [col for col in isotope_cols if first_row[col] != 0]
 
-  print("Isotopes with non-zero concentration at t=0:", nonzero_isotopes)
-
-  print("==========================")
+  logger.info(f"Number of element columns: {len(isotope_cols)}")
+  logger.info(f"Number of state columns: {len(df.columns) - len(isotope_cols)}")
+  logger.info("Isotopes with non-zero concentration at t=0:", nonzero_isotopes)
   
 
-def filter_columns(df, elements_to_keep, features_to_keep):
-    import numpy as np, re
+def filter_columns(df, elements_mask, features_mask):
+  # Keep all numeric columns
+  numeric_cols = df.select_dtypes(include=[np.number]).columns
+  element_cols = [col for col in numeric_cols if re.match(r'^[A-Za-z]+[0-9]+(_.*)?$', col)]
+  elements_to_keep = [col for col in elements_mask if col in element_cols]
 
-    # Keep all numeric columns
-    numeric_cols = df.select_dtypes(include=[np.number]).columns
-    element_cols = [col for col in numeric_cols if re.match(r'^[A-Za-z]+[0-9]+(_.*)?$', col)]
-    elements_existing = [col for col in elements_to_keep if col in element_cols]
+  # Keep features_mask regardless of type
+  non_element_to_keep = [col for col in features_mask if col in df.columns and col not in element_cols]
 
-    # Keep features_to_keep regardless of type
-    non_element_to_keep = [col for col in features_to_keep if col in df.columns and col not in element_cols]
+  # Error checking
+  if len(elements_to_keep) != len(elements_mask):
+    logger.warning("Warning: Some specified elements were not found in the DataFrame.")
+  if len(non_element_to_keep) != len(features_mask):
+    logger.warning("Warning: Some specified features were not found in the DataFrame.")
 
-    if len(elements_existing) != len(elements_to_keep):
-        logger.warning("Warning: Some specified elements were not found in the DataFrame.")
+  final_cols = non_element_to_keep + elements_to_keep
+  new_df = df[final_cols]
 
-    final_cols = non_element_to_keep + elements_existing
-    new_df = df[final_cols]
+  logger.info(f"Kept {len(elements_to_keep)} elements and {len(non_element_to_keep)} state columns. Total columns: {new_df.shape[1]}")
+  return new_df
 
-    logger.info(f"Kept {len(elements_existing)} elements and {len(non_element_to_keep)} state columns. Total columns: {new_df.shape[1]}")
-    return new_df
 
 def split_df(df):
   data_array = df.to_numpy()
@@ -148,9 +148,9 @@ def create_timeseries_targets(data, time_col_idx, element_dict, target_elements)
   X = data[valid_indices]
   y = data[valid_indices + 1][:, target_indices]
   
-  print(f"Detected {len(run_end_indices)} runs")
-  print(f"Created {len(X)} training samples")
-  print(f"Input shape: {X.shape} | Target shape: {y.shape}")
-  print(f"Targets: {target_elements}")
+  logger.info(f"Detected {len(run_end_indices)} runs")
+  logger.info(f"Created {len(X)} training samples")
+  logger.info(f"Input shape: {X.shape} | Target shape: {y.shape}")
+  logger.info(f"Targets: {target_elements}")
   
   return X, y

@@ -51,6 +51,7 @@ def train(datamodule, model, cfg: DictConfig):
   trainer.test(model=model, datamodule=datamodule)
 
 if __name__ == "__main__":
+
   cfg = OmegaConf.load("test_config.yaml")
   datamodule = DNN_Datamodule.DNN_Datamodule(cfg)
   train(datamodule, DNN_Model.DNN_Model, cfg)
