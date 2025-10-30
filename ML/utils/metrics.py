@@ -2,7 +2,8 @@
 from loguru import logger
 import numpy as np
 import torch 
-from sklearn.metrics import r2_score
+
+
 def calculate_feature_importance(model, test_loader, device, n_repeats=10, 
                                  metric={'name': 'r2', 'direction': 'increasing'}):
   from sklearn.metrics import r2_score, mean_squared_error, mean_absolute_error
@@ -30,19 +31,19 @@ def calculate_feature_importance(model, test_loader, device, n_repeats=10,
   metric_direction = metric['direction'].lower()
   
   if metric_name not in metric_functions:
-      raise ValueError(f"Unsupported metric: {metric_name}. Choose from {list(metric_functions.keys())}")
+    raise ValueError(f"Unsupported metric: {metric_name}. Choose from {list(metric_functions.keys())}")
   
   if metric_direction not in ['increasing', 'decreasing']:
-      raise ValueError("Direction must be 'increasing' or 'decreasing'")
+    raise ValueError("Direction must be 'increasing' or 'decreasing'")
   
   metric_func = metric_functions[metric_name]
   
   # Get baseline performance
   model.eval()
   with torch.no_grad():
-      X_tensor = torch.FloatTensor(X_test).to(device)
-      baseline_predictions = model(X_tensor).cpu().numpy().flatten()
-  
+    X_tensor = torch.FloatTensor(X_test).to(device)
+    baseline_predictions = model(X_tensor).cpu().numpy().flatten()
+
   baseline_score = metric_func(y_test, baseline_predictions)
   
   # Calculate permutation importance for each feature
@@ -51,31 +52,31 @@ def calculate_feature_importance(model, test_loader, device, n_repeats=10,
   logger.info(f"Calculating Feature Importances using {metric_name} ({metric_direction} is better)")
   
   for feature_idx in range(n_features):
-      for repeat in range(n_repeats):
-          # Copy the test set
-          X_permuted = X_test.copy()
-          
-          # Shuffle the feature column
-          np.random.shuffle(X_permuted[:, feature_idx])
-          
-          # Get predictions with permuted feature
-          with torch.no_grad():
-              X_permuted_tensor = torch.FloatTensor(X_permuted).to(device)
-              permuted_predictions = model(X_permuted_tensor).cpu().numpy().flatten()
-          
-          # Calculate the change in score
-          permuted_score = metric_func(y_test, permuted_predictions)
-          
-          # Calculate importance based on direction
-          if metric_direction == 'increasing':
-              # For metrics where higher is better (e.g., R²)
-              # Positive importance = performance dropped when feature was shuffled
-              feature_importances[feature_idx, repeat] = baseline_score - permuted_score
-          else:  # decreasing
-              # For metrics where lower is better (e.g., MSE, MAE)
-              # Positive importance = performance got worse (score increased) when feature was shuffled
-              feature_importances[feature_idx, repeat] = permuted_score - baseline_score
-  
+    for repeat in range(n_repeats):
+      # Copy the test set
+      X_permuted = X_test.copy()
+      
+      # Shuffle the feature column
+      np.random.shuffle(X_permuted[:, feature_idx])
+      
+      # Get predictions with permuted feature
+      with torch.no_grad():
+        X_permuted_tensor = torch.FloatTensor(X_permuted).to(device)
+        permuted_predictions = model(X_permuted_tensor).cpu().numpy().flatten()
+      
+      # Calculate the change in score
+      permuted_score = metric_func(y_test, permuted_predictions)
+      
+      # Calculate importance based on direction
+      if metric_direction == 'increasing':
+        # For metrics where higher is better (e.g., R²)
+        # Positive importance = performance dropped when feature was shuffled
+        feature_importances[feature_idx, repeat] = baseline_score - permuted_score
+      else:  # decreasing
+        # For metrics where lower is better (e.g., MSE, MAE)
+        # Positive importance = performance got worse (score increased) when feature was shuffled
+        feature_importances[feature_idx, repeat] = permuted_score - baseline_score
+
   # Calculate mean and std
   importance_means = feature_importances.mean(axis=1)
   importance_stds = feature_importances.std(axis=1)
@@ -91,7 +92,7 @@ def get_teacher_forced_predictions(model, data, y_scaler, device):
   # Get predictions
   model.eval()
   with torch.no_grad():
-      predictions_scaled = model(data_tensor).cpu().numpy().flatten()
+    predictions_scaled = model(data_tensor).cpu().numpy().flatten()
   
   # Inverse transform to original scale
   predictions = y_scaler.inverse_transform(predictions_scaled.reshape(-1, 1)).flatten()

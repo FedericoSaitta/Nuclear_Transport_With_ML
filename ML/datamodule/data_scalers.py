@@ -7,8 +7,19 @@ from sklearn.preprocessing import (
   QuantileTransformer,
   PowerTransformer
 )
+from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.compose import ColumnTransformer
 from loguru import logger
+
+
+# No-operation scaler that returns data unchanged
+class NoOpScaler(BaseEstimator, TransformerMixin):
+  """A scaler that does nothing - returns data unchanged."""
+  def fit(self, X, y=None): return self
+  def transform(self, X): return X
+  def fit_transform(self, X, y=None): return X
+  def inverse_transform(self, X): return X
+
 
 # Returns a scaler object based on user's input
 def get_scaler(scaler_name):
@@ -19,12 +30,14 @@ def get_scaler(scaler_name):
     'maxabs': MaxAbsScaler(),
     'normalizer': Normalizer(),
     'quantile': QuantileTransformer(),
-    'power': PowerTransformer()
+    'power': PowerTransformer(),
+    'none': NoOpScaler(),
   }
   
   scaler_name_lower = scaler_name.lower().strip()
   
-  if scaler_name_lower in scaler_map: return scaler_map[scaler_name_lower]
+  if scaler_name_lower in scaler_map: 
+    return scaler_map[scaler_name_lower]
   else:
     available = ', '.join(scaler_map.keys())
     raise ValueError(f"Unknown scaler: '{scaler_name}'. Available scalers: {available}")
@@ -41,7 +54,8 @@ def print_transformer_summary(column_transformer, col_index_map):
     if transformer == 'passthrough': 
       logger.error(f'Col {name} is being passed through')
       scaler_name = 'Passthrough (no scaling)'
-    else: scaler_name = transformer.__class__.__name__
+    else: 
+      scaler_name = transformer.__class__.__name__
     
     col_names = [idx_to_col.get(col, f"index_{col}") for col in columns]
     logger.info(f"  {scaler_name}: {col_names}") 
@@ -64,33 +78,31 @@ def create_column_transformer(scaler_dict, col_index_map):
   column_transformer = ColumnTransformer(
     transformers=transformers,
     sparse_threshold=0,  # Return dense array, 
-    remainder='passthrough', 
     verbose_feature_names_out=False
   )
   print_transformer_summary(column_transformer, col_index_map)
   
   return column_transformer
 
+
 def inverse_transform_column_transformer(column_transformer, X):
   X_original = X.copy()
   
   for name, transformer, columns in column_transformer.transformers_:
-    if transformer == 'passthrough':
-      continue # These columns are already in original scale, do nothing
-    else:
-        if isinstance(columns, list): col_indices = columns
-        else: col_indices = [columns]
-        
-        # Extract data for these columns
-        col_data = X[:, col_indices]
-        
-        # Inverse transform
-        if hasattr(transformer, 'inverse_transform'):
-          col_data_original = transformer.inverse_transform(col_data)
-          
-          # Put back into array
-          X_original[:, col_indices] = col_data_original
-        else: 
-          logger.error(f"Could not compute inverse transform for col {columns} with {name} scaler")
+    if isinstance(columns, list): 
+      col_indices = columns
+    else: 
+      col_indices = [columns]
+    
+    # Extract data for these columns
+    col_data = X[:, col_indices]
+    
+    # Inverse transform
+    if hasattr(transformer, 'inverse_transform'):
+      col_data_original = transformer.inverse_transform(col_data)
+      X_original[:, col_indices] = col_data_original # Put back in array
+    else: 
+      logger.error(f"Could not compute inverse transform for col {columns} with {name} scaler")
+      raise ValueError(f"Could not compute inverse transform for col {columns} with {name} scaler")
 
   return X_original

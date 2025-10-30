@@ -169,8 +169,6 @@ class DNN_Model(L.LightningModule):
     y_true_test = torch.cat(y_true_list).cpu().detach().numpy().squeeze()
     y_pred_test = torch.cat(y_pred_list).cpu().detach().numpy().squeeze()
 
-
-    ## FIX The metric inputs to this function
     plot.plot_predictions_vs_actuals(y_true_test, y_pred_test, self.mae.compute().item(), np.sqrt(self.mse.compute().item()), self.r2.compute().item(), self.result_dir)
     plot.plot_residuals_combined(y_true_test, y_pred_test, self.result_dir)
 
