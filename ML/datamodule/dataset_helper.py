@@ -5,6 +5,8 @@ import re
 import glob
 import os
 from loguru import logger
+import torch
+from torch.utils.data import DataLoader, TensorDataset
 
 def check_duplicates(pandas_df):
   # Get all columns except 'run_label'
@@ -154,3 +156,37 @@ def create_timeseries_targets(data, time_col_idx, element_dict, target_elements)
   logger.info(f"Targets: {target_elements}")
   
   return X, y
+
+
+def scale_datasets(X_train, X_val, X_test, y_train, y_val, y_test, X_first_run, input_scaler, target_scaler):
+  # Scale inputs
+  X_train = input_scaler.fit_transform(X_train)
+  X_val = input_scaler.transform(X_val)
+  X_test = input_scaler.transform(X_test)
+  X_first_run = input_scaler.transform(X_first_run)
+  
+  # Scale targets
+  y_train = target_scaler.fit_transform(y_train.reshape(-1, 1)).flatten()
+  y_val = target_scaler.transform(y_val.reshape(-1, 1)).flatten()
+  y_test = target_scaler.transform(y_test.reshape(-1, 1)).flatten()
+  
+  return X_train, X_val, X_test, y_train, y_val, y_test, X_first_run
+
+
+def create_tensor_datasets(X_train, X_val, X_test, y_train, y_val, y_test):
+  # Convert inputs to tensors (replace NaN with -1)
+  X_train_tensor = torch.nan_to_num(torch.tensor(X_train, dtype=torch.float32), nan=-1)
+  X_val_tensor = torch.nan_to_num(torch.tensor(X_val, dtype=torch.float32), nan=-1)
+  X_test_tensor = torch.nan_to_num(torch.tensor(X_test, dtype=torch.float32), nan=-1)
+  
+  # Convert targets to tensors
+  y_train_tensor = torch.tensor(y_train, dtype=torch.float32)
+  y_val_tensor = torch.tensor(y_val, dtype=torch.float32)
+  y_test_tensor = torch.tensor(y_test, dtype=torch.float32)
+  
+  # Create datasets
+  train_dataset = TensorDataset(X_train_tensor, y_train_tensor)
+  val_dataset = TensorDataset(X_val_tensor, y_val_tensor)
+  test_dataset = TensorDataset(X_test_tensor, y_test_tensor)
+  
+  return train_dataset, val_dataset, test_dataset

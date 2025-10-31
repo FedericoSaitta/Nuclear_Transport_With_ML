@@ -15,38 +15,6 @@ import ML.datamodule.dataset_helper as data_help
 import ML.utils.plot as plot
 import ML.datamodule.data_scalers as data_scalers
 
-def scale_datasets(X_train, X_val, X_test, y_train, y_val, y_test, X_first_run, input_scaler, target_scaler):
-  # Scale inputs
-  X_train = input_scaler.fit_transform(X_train)
-  X_val = input_scaler.transform(X_val)
-  X_test = input_scaler.transform(X_test)
-  X_first_run = input_scaler.transform(X_first_run)
-  
-  # Scale targets
-  y_train = target_scaler.fit_transform(y_train.reshape(-1, 1)).flatten()
-  y_val = target_scaler.transform(y_val.reshape(-1, 1)).flatten()
-  y_test = target_scaler.transform(y_test.reshape(-1, 1)).flatten()
-  
-  return X_train, X_val, X_test, y_train, y_val, y_test, X_first_run
-
-
-def create_tensor_datasets(X_train, X_val, X_test, y_train, y_val, y_test):
-  # Convert inputs to tensors (replace NaN with -1)
-  X_train_tensor = torch.nan_to_num(torch.tensor(X_train, dtype=torch.float32), nan=-1)
-  X_val_tensor = torch.nan_to_num(torch.tensor(X_val, dtype=torch.float32), nan=-1)
-  X_test_tensor = torch.nan_to_num(torch.tensor(X_test, dtype=torch.float32), nan=-1)
-  
-  # Convert targets to tensors
-  y_train_tensor = torch.tensor(y_train, dtype=torch.float32)
-  y_val_tensor = torch.tensor(y_val, dtype=torch.float32)
-  y_test_tensor = torch.tensor(y_test, dtype=torch.float32)
-  
-  # Create datasets
-  train_dataset = TensorDataset(X_train_tensor, y_train_tensor)
-  val_dataset = TensorDataset(X_val_tensor, y_val_tensor)
-  test_dataset = TensorDataset(X_test_tensor, y_test_tensor)
-  
-  return train_dataset, val_dataset, test_dataset
 
 class DNN_Datamodule(L.LightningDataModule):
   def __init__(self, cfg_object: DictConfig):
@@ -92,8 +60,6 @@ class DNN_Datamodule(L.LightningDataModule):
     data_help.print_dataset_stats(data_df)
 
     data_df = data_help.filter_columns(data_df, self.input_elements, self.state_features)
-
-
     data_arr, col_index_map = data_help.split_df(data_df)
 
     self.col_index_map = col_index_map
@@ -134,14 +100,14 @@ class DNN_Datamodule(L.LightningDataModule):
     plot.plot_data_distributions(X_train, y_train, col_index_map, target_name='Target', save_dir=self.result_dir, name='Raw_Data')
     
     # Scale all datasets
-    X_train, X_val, X_test, y_train, y_val, y_test, self.first_run = scale_datasets(
+    X_train, X_val, X_test, y_train, y_val, y_test, self.first_run = data_help.scale_datasets(
       X_train, X_val, X_test, y_train, y_val, y_test, self.first_run, self.input_scaler, self.target_scaler
     )
 
     plot.plot_data_distributions(X_train, y_train, col_index_map, target_name='Target', save_dir=self.result_dir, name='Scaled_Data')
     
     # Create tensor datasets
-    self.train_dataset, self.val_dataset, self.test_dataset = create_tensor_datasets(
+    self.train_dataset, self.val_dataset, self.test_dataset = data_help.create_tensor_datasets(
       X_train, X_val, X_test, y_train, y_val, y_test
     )
 

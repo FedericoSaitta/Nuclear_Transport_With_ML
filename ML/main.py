@@ -13,7 +13,7 @@ import ML.datamodule.DNN_Datamodule as DNN_Datamodule
 import ML.models.DNN_Model as DNN_Model
 
 
-def train(datamodule, model, cfg):
+def train_and_test(datamodule, model, cfg):
   model_name = cfg.model.name
   result_dir = f'results/{model_name}/'
   os.makedirs(result_dir, exist_ok=True)
@@ -41,15 +41,10 @@ def train(datamodule, model, cfg):
       verbose=False
     ))
 
-  # Reduced the number of open files that each worker creates
-  mp.set_sharing_strategy('file_system')
+  mp.set_sharing_strategy('file_system') # Reduced the number of open files that each worker creates
   
-  # Create CSV logger that saves to results folder
-  csv_logger = CSVLogger(
-    save_dir=result_dir,
-    name='',  # No subdirectory
-    version=''  # No version subdirectory
-  )
+  # Create CSV logger that saves to results folder instead of lightnig logs
+  csv_logger = CSVLogger(save_dir=result_dir, name='', version='')
   
   model = model(config_object=cfg)
   trainer = L.Trainer(
@@ -74,4 +69,4 @@ if __name__ == "__main__":
 
   cfg = OmegaConf.load("test_config.yaml")
   datamodule = DNN_Datamodule.DNN_Datamodule(cfg)
-  train(datamodule, DNN_Model.DNN_Model, cfg)
+  train_and_test(datamodule, DNN_Model.DNN_Model, cfg)
