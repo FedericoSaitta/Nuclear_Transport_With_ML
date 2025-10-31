@@ -22,6 +22,12 @@ To install the Python bindings
 python -m pip install .
 ``` 
 
+To install the ML package and its dependencies run in the Root folder:
+``` bash
+pip install -e .
+``` 
+
+
 To test Python library installation:
 ``` bash
 python test.py

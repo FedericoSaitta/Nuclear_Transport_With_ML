@@ -1,0 +1,9 @@
+scikit-learn
+matplotlib
+seaborn
+pandas
+numpy
+torch
+pytorch-lightning
+omegaconf
+loguru
