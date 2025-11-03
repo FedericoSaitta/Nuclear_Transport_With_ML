@@ -52,7 +52,7 @@ def add_burnup_to_df(pandas_df):
   return pandas_df
 
 
-def read_data(folder_path, drop_run_label=True):
+def read_data(folder_path, fraction_of_data, drop_run_label=True):
   # Get all CSV files in the folder
   csv_files = glob.glob(os.path.join(folder_path, "*.csv"))
   
@@ -72,6 +72,12 @@ def read_data(folder_path, drop_run_label=True):
   
   combined_df = pd.concat(dfs, ignore_index=True)
   check_duplicates(combined_df) # Checking if entire dataset has duplicates
+
+  if (fraction_of_data < 1.0):
+    total_runs = combined_df.shape[0] / 101 # Hard coding each run is 101 time steps long
+    runs_kept = int(fraction_of_data * total_runs) # Find the closest integer run number
+    combined_df = combined_df.iloc[0:runs_kept*101]
+    logger.info(f"Cutting Down Dataset to {fraction_of_data*100}%, runs present: {runs_kept}")
 
   return combined_df
 
@@ -96,26 +102,8 @@ def print_dataset_stats(df):
   logger.info("Isotopes with non-zero concentration at t=0:", nonzero_isotopes)
   
 
-def filter_columns(df, elements_mask, features_mask):
-  # Keep all numeric columns
-  numeric_cols = df.select_dtypes(include=[np.number]).columns
-  element_cols = [col for col in numeric_cols if re.match(r'^[A-Za-z]+[0-9]+(_.*)?$', col)]
-  elements_to_keep = [col for col in elements_mask if col in element_cols]
-
-  # Keep features_mask regardless of type
-  non_element_to_keep = [col for col in features_mask if col in df.columns and col not in element_cols]
-
-  # Error checking
-  if len(elements_to_keep) != len(elements_mask):
-    logger.warning("Warning: Some specified elements were not found in the DataFrame.")
-  if len(non_element_to_keep) != len(features_mask):
-    logger.warning("Warning: Some specified features were not found in the DataFrame.")
-
-  final_cols = non_element_to_keep + elements_to_keep
-  new_df = df[final_cols]
-
-  logger.info(f"Kept {len(elements_to_keep)} elements and {len(non_element_to_keep)} state columns. Total columns: {new_df.shape[1]}")
-  return new_df
+def filter_columns(df, input_features):
+  return df[input_features].copy() 
 
 
 def split_df(df):

@@ -1,21 +1,28 @@
 dataset:
   path_to_data: "generated_data"
+  fraction_of_data: 1.0         # 1.0 means use the full dataset
 
-  state_features: ["time_days", "power_W_g", "int_p_W", 'fuel_temp_K', 'mod_temp_K', 
-                   'clad_temp_K', 'mod_density_g_cm3', 'boron_ppm', 'burnup_MWd_per_kg']
-  input_elements: ["Th232"]
-  target: "Th232"
-
-  # Scaling configuration
-  input_element_scaling: "Standard"  # Scaling of input element concentrations
-  input_state_scaling: "MinMax"      # Scaling of input state variables
-  target_scaling: "Standard"         # Scaling of target values
+  inputs:
+    time_days: "MinMax"
+    power_W_g: "MinMax"
+    int_p_W: "MinMax"
+    fuel_temp_K: "MinMax"
+    mod_temp_K: "MinMax"
+    clad_temp_K: "MinMax"
+    mod_density_g_cm3: "MinMax"
+    boron_ppm: "MinMax"
+    burnup_MWd_per_kg: "MinMax"
+    U238: "Standard"
+  
+  # Target features with scaling
+  targets:
+    U238: "Standard"
 
   # Data loader configuration
   train:
     batch_size: 2048
   val:
-    batch_size: 2048
+    batch_size: 8192
 
 model:
   name: "SimpleDNN"
@@ -38,7 +45,10 @@ output:
   result_dir: "results/${model.name}/"
 
 runtime:
-  device: "cuda"
+  mode: "train"    # Options: train, train_from_ckp
+  ckp_path: 'results/SimpleDNN/best-SimpleDNN-epoch=397.ckpt'
+
+  device: "cude"
   seed: 42
   drop_last: false
-  num_workers: 14
+  num_workers: 10

@@ -9,16 +9,10 @@ EMAIL = 'my_email@gmail.com'
 
 # Additional configuration
 PARTITION = 'gpuL'  # Options: 'gpuA', 'gpuA40GB', 'gpuL'
-WALLTIME = '1-0'    # 1 day (format: days-hours)
+WALLTIME = '0-1'    # 1 day (format: days-hours)
 JOB_NAME = 'gpu_job'
 CUDA_VERSION = '11.8.0'  # Update this to an available version
 PYTHON_SCRIPT = 'main.py'
-
-# Environment settings - UPDATE THESE
-CONDA_ENV = 'myenv'  # Your conda environment name
-# OR
-VENV_PATH = '/path/to/your/venv'  # Your virtual environment path
-
 
 def create_slurm_script(output_file='submit_gpu_job.sh'):
     """Generate a Slurm job submission script."""
@@ -87,7 +81,6 @@ def main():
     print(f"  Partition: {PARTITION}")
     print(f"  Email: {EMAIL}")
     print(f"  Python script: {PYTHON_SCRIPT}")
-    print(f"  CUDA version: {CUDA_VERSION}")
     print()
     
     # Create the Slurm script

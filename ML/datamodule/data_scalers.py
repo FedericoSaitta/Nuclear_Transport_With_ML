@@ -43,6 +43,15 @@ def get_scaler(scaler_name):
     raise ValueError(f"Unknown scaler: '{scaler_name}'. Available scalers: {available}")
 
 
+def create_scaler_dict(config_dict):
+  scaler_dict = {}
+  
+  for key, value in config_dict.items():
+      scaler_dict[key] = get_scaler(value)
+  
+  return scaler_dict
+
+
 def print_transformer_summary(column_transformer, col_index_map):
   """Print a summary of which scaler is applied to which columns."""
   logger.info("ColumnTransformer Summary:")
@@ -62,27 +71,32 @@ def print_transformer_summary(column_transformer, col_index_map):
 
 
 def create_column_transformer(scaler_dict, col_index_map):
-  transformers = []
-  
-  # Sort columns by their index to maintain original order
-  sorted_cols = sorted(col_index_map.items(), key=lambda x: x[1])
-  
-  for col_name, col_idx in sorted_cols:
-    if col_name in scaler_dict:
-      scaler = scaler_dict[col_name]          # Apply the specified scaler
-      transformers.append((f"{col_name}", scaler, [col_idx]))
-    else:
-      raise ValueError(f'Column: {col_name} with index {col_idx} is not in the scaler dictionary')
-  
-  # Create ColumnTransformer
-  column_transformer = ColumnTransformer(
-    transformers=transformers,
-    sparse_threshold=0,  # Return dense array, 
-    verbose_feature_names_out=False
-  )
-  print_transformer_summary(column_transformer, col_index_map)
-  
-  return column_transformer
+    transformers = []
+    
+    # Sort columns by their index to maintain original order
+    sorted_cols = sorted(col_index_map.items(), key=lambda x: x[1])
+    
+    for col_name, col_idx in sorted_cols:
+        if col_name in scaler_dict:
+            scaler = scaler_dict[col_name]
+            transformers.append((f"{col_name}", scaler, [col_idx]))
+        else:
+            raise ValueError(
+                f"Column '{col_name}' with index {col_idx} is not in the scaler dictionary.\n"
+                f"Available scalers: {list(scaler_dict.keys())}"
+            )
+    
+    # Create ColumnTransformer
+    column_transformer = ColumnTransformer(
+        transformers=transformers,
+        sparse_threshold=0,  # Return dense array
+        verbose_feature_names_out=False
+    )
+    
+    logger.info(f"Created ColumnTransformer with {len(transformers)} transformers")
+    print_transformer_summary(column_transformer, col_index_map)
+    
+    return column_transformer
 
 
 def inverse_transform_column_transformer(column_transformer, X):

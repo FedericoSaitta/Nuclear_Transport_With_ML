@@ -63,10 +63,7 @@ def plot_correlation_matrix(X, Y, col_index_map, target_name='Target', save_dir=
   logger.info(f"Correlation matrix saved to: {filepath}")
   
 
-def plot_data_distributions(X, Y, col_index_map, target_name='Target', save_dir=None, name='Raw_Data'):
-  # Ensure Y is 1D
-  if Y.ndim > 1 and Y.shape[1] == 1: Y = Y.flatten()
-  
+def plot_data_distributions(X, col_index_map, save_dir=None, name='Raw_Data'):
   # Get all feature names sorted by index
   feature_list = sorted(col_index_map.items(), key=lambda x: x[1])
   feature_names = [name for name, _ in feature_list]
@@ -76,43 +73,48 @@ def plot_data_distributions(X, Y, col_index_map, target_name='Target', save_dir=
   n_cols = 4
   n_rows = int(np.ceil(n_features / n_cols))
   
-  # Create figure
-  fig, axes = plt.subplots(n_rows, n_cols, figsize=(16, 4*n_rows))
-  axes = axes.flatten() if n_features > 1 else [axes]
+  # Create figure - handle single feature case
+  if n_features == 1:
+      fig, ax = plt.subplots(1, 1, figsize=(6, 4))
+      axes = [ax]  # Wrap single axis in list
+  else:
+      fig, axes = plt.subplots(n_rows, n_cols, figsize=(16, 4*n_rows))
+      axes = axes.flatten()
   
   # Plot histogram for each feature
   for idx, (feature_name, col_idx) in enumerate(feature_list):
-    ax = axes[idx]
-    data = X[:, col_idx]
-    
-    # Create histogram
-    n, bins, patches = ax.hist(data, bins=50, alpha=0.7, edgecolor='black', linewidth=0.5)
-    
-    # Color code if this is the target feature
-    if feature_name == target_name:
+      ax = axes[idx]
+      
+      # Handle 1D or 2D array
+      if X.ndim == 1:
+          data = X
+      else:
+          data = X[:, col_idx]
+      
+      # Create histogram
+      n, bins, patches = ax.hist(data, bins=50, alpha=0.7, edgecolor='black', linewidth=0.5)
+      
+      # Color code
       for patch in patches:
-        patch.set_facecolor('red')
-        patch.set_alpha(0.7)
-      ax.set_title(f'{feature_name} (TARGET at t)', fontweight='bold', color='red')
-    else:
-      for patch in patches:
-        patch.set_facecolor('steelblue')
+          patch.set_facecolor('steelblue')
+      
       ax.set_title(feature_name)
-    
-    ax.set_xlabel('Value')
-    ax.set_ylabel('Frequency')
-    ax.grid(True, alpha=0.3)
-    
-    # Add statistics
-    mean_val = np.mean(data)
-    ax.axvline(mean_val, color='red', linestyle='--', linewidth=2, label=f'Mean: {mean_val:.3e}')
-    ax.legend(fontsize=8)
+      ax.set_xlabel('Value')
+      ax.set_ylabel('Frequency')
+      ax.grid(True, alpha=0.3)
+      
+      # Add statistics
+      mean_val = np.mean(data)
+      std_val = np.std(data)
+      ax.axvline(mean_val, color='red', linestyle='--', linewidth=2, 
+                  label=f'Mean: {mean_val:.3e}')
+      ax.legend(fontsize=8)
   
   # Hide unused subplots
   for idx in range(n_features, len(axes)):
-    axes[idx].axis('off')
+      axes[idx].axis('off')
   
-  plt.suptitle('Feature Distributions (Input Features at time t)', 
+  plt.suptitle(f'{name} - Feature Distributions', 
                 fontsize=16, fontweight='bold', y=1.0)
   plt.tight_layout()
   
@@ -120,7 +122,6 @@ def plot_data_distributions(X, Y, col_index_map, target_name='Target', save_dir=
   plt.savefig(filepath, dpi=300, bbox_inches='tight')
   plt.close()
   logger.info(f"Feature distributions saved to: {filepath}")
-
 
 def plot_losses(train_losses, val_losses, save_dir):
   plt.figure(figsize=(10, 6))
@@ -286,8 +287,5 @@ def plot_prediction_comparison(ground_truth, teacher_forced_preds, autoregressiv
   ax2.legend(loc='best', fontsize=10, framealpha=0.95, edgecolor='black')
   ax2.tick_params(labelsize=11)
   
-  # Save the figure
-  plt.tight_layout()
-  plt.savefig(os.path.join(result_dir, f'{target_name}_prediction_comparison.png'), 
-              dpi=300, bbox_inches='tight')
+  plt.savefig(os.path.join(result_dir, f'{target_name}_prediction_comparison.png'), dpi=300, bbox_inches='tight')
   plt.close()
