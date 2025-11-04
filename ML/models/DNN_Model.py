@@ -181,54 +181,50 @@ class DNN_Model(L.LightningModule):
   # Gets called for each test epoch
   def on_test_epoch_end(self):
 
-    # Manually run prediction over test set
+    # Manually run prediction over test set AND collect X, Y in one pass
     datamodule = self.trainer.datamodule
     loader = datamodule.test_dataloader()
+    
     y_true_list, y_pred_list = [], []
+    X_test_list, Y_test_list = [], []
+    
+    # Get the teacher forced predictions from the model
     for batch in loader:
       batch = self.transfer_batch_to_device(batch, self.device, 0)
+      
+      # Collect X and Y for later use
+      X_test_list.append(batch[0].cpu().numpy())
+      Y_test_list.append(batch[1].cpu().numpy())
+      
+      # Get predictions
       res = self.predict_step(batch, batch_idx=0)
       y_true_list.append(res["labels"].cpu())
       y_pred_list.append(res["predictions"].cpu())
 
     y_true_test = torch.cat(y_true_list).cpu().detach().numpy()
     y_pred_test = torch.cat(y_pred_list).cpu().detach().numpy()
+    X_test = np.concatenate(X_test_list, axis=0)
+    Y_test = np.concatenate(Y_test_list, axis=0)
 
     # Get target names
     target_names = list(datamodule.target.keys())
     
     # Ensure data is 2D for multi-output handling
-    if y_true_test.ndim == 1:
-      y_true_test = y_true_test.reshape(-1, 1)
-    if y_pred_test.ndim == 1:
-      y_pred_test = y_pred_test.reshape(-1, 1)
+    if y_true_test.ndim == 1: y_true_test = y_true_test.reshape(-1, 1)
+    if y_pred_test.ndim == 1: y_pred_test = y_pred_test.reshape(-1, 1)
     
     logger.info(f"Test set shape - True: {y_true_test.shape}, Pred: {y_pred_test.shape}")
     
     # Compute per-output metrics manually using numpy
-    mae_per_output = np.mean(np.abs(y_true_test - y_pred_test), axis=0)
-    mse_per_output = np.mean((y_true_test - y_pred_test) ** 2, axis=0)
-    rmse_per_output = np.sqrt(mse_per_output)
-    
-    # Compute R² per output manually
-    r2_per_output = np.zeros(y_true_test.shape[1])
-    for i in range(y_true_test.shape[1]):
-      ss_res = np.sum((y_true_test[:, i] - y_pred_test[:, i]) ** 2)
-      ss_tot = np.sum((y_true_test[:, i] - np.mean(y_true_test[:, i])) ** 2)
-      r2_per_output[i] = 1 - (ss_res / ss_tot) if ss_tot != 0 else 0.0
-    
-    # Ensure all metrics are arrays
-    if mae_per_output.ndim == 0:
-      mae_per_output = np.array([mae_per_output])
-    if mse_per_output.ndim == 0:
-      mse_per_output = np.array([mse_per_output])
-    if rmse_per_output.ndim == 0:
-      rmse_per_output = np.array([rmse_per_output])
+    mae_per_output = metrics.mae(y_true_test, y_pred_test)
+    mse_per_output = metrics.mse(y_true_test, y_pred_test)
+    rmse_per_output = metrics.rmse(y_true_test, y_pred_test)
+    r2_per_output = metrics.r2(y_true_test, y_pred_test)
     
     # Log overall averaged metrics
-    logger.info(f"\n{'='*60}")
+    logger.info(f"\n{'='*20}")
     logger.info(f"OVERALL METRICS (averaged across {len(target_names)} outputs)")
-    logger.info(f"{'='*60}")
+    logger.info(f"{'='*20}")
     logger.info(f"Overall MAE: {mae_per_output.mean():.4f}")
     logger.info(f"Overall RMSE: {rmse_per_output.mean():.4f}")
     logger.info(f"Overall R²: {r2_per_output.mean():.4f}")
@@ -239,15 +235,17 @@ class DNN_Model(L.LightningModule):
     
     # === Process each output separately ===
     for idx, target_name in enumerate(target_names):
-      logger.info(f"\n{'='*60}")
+      # Create output-specific directory
+      output_dir = os.path.join(self.result_dir, target_name)
+      os.makedirs(output_dir, exist_ok=True)
+
+      logger.info(f"\n{'='*20}")
       logger.info(f"Output {idx+1}/{len(target_names)}: {target_name}")
-      logger.info(f"{'='*60}")
+      logger.info(f"{'='*20}")
       
-      # Extract data for this output
+      # Extract data and metrics for this output
       y_true_output = y_true_test[:, idx]
       y_pred_output = y_pred_test[:, idx]
-      
-      # Get metrics for this output
       mae_output = mae_per_output[idx]
       mse_output = mse_per_output[idx]
       rmse_output = rmse_per_output[idx]
@@ -258,44 +256,67 @@ class DNN_Model(L.LightningModule):
       logger.info(f"RMSE: {rmse_output:.6f}")
       logger.info(f"R²:   {r2_output:.6f}")
       
-      # Compute MARE for this output
-      max_val = np.max(np.abs(y_true_output))
-      if max_val > 0:
-        ARE = np.abs(y_true_output - y_pred_output) / max_val
-        mare_output = np.mean(ARE)
-        logger.info(f'MARE: {mare_output:.6f}')
-        self.log(f'MARE_{target_name}', float(mare_output))
-      else:
-        logger.warning(f'Cannot compute MARE for {target_name}: max value is 0')
-      
-      # Compute additional statistics
-      mean_error = np.mean(y_pred_output - y_true_output)
-      std_error = np.std(y_pred_output - y_true_output)
-      logger.info(f"Mean Error: {mean_error:.6f} ± {std_error:.6f}")
-      
-      # Create output-specific directory
-      output_dir = os.path.join(self.result_dir, target_name)
-      os.makedirs(output_dir, exist_ok=True)
-      
-      # Plot predictions vs actuals for this output
-      plot.plot_predictions_vs_actuals(
-        y_true_output, 
-        y_pred_output, 
-        mae_output, 
-        rmse_output, 
-        r2_output, 
-        output_dir
-      )
-      
-      # Plot residuals for this output
+
+      plot.plot_predictions_vs_actuals(y_true_output, y_pred_output, mae_output, rmse_output, r2_output, output_dir)
       plot.plot_residuals_combined(y_true_output, y_pred_output, output_dir)
       
       logger.info(f"Plots saved to: {output_dir}")
     
+    # === MARE Comparison: Teacher-Forcing vs Autoregressive ===
+    logger.info(f"\n{'='*20}")
+    logger.info("MARE: Teacher-Forcing vs Autoregressive")
+    logger.info(f"{'='*20}")
+    
+    col_index_map = datamodule.col_index_map
+    input_scaler = datamodule.input_scaler
+    y_scaler = datamodule.target_scaler
+    
+    # Create target_col_indices dict
+    target_col_indices = {name: col_index_map[name] for name in target_names}
+    
+    # Get ground truth from Y_test
+    if Y_test.ndim == 1: Y_test_2d = Y_test.reshape(-1, 1)
+    else: Y_test_2d = Y_test
+    
+    # Inverse transform Y_test to get ground truth
+    Y_test_original = data_scaler.inverse_transform_column_transformer(y_scaler, Y_test_2d)
+    
+    # Teacher-Forcing: Use y_true_test (already computed from predictions above)
+    tf_ground_truth = Y_test_original
+    tf_predictions = y_pred_test  # Already in original scale from predict_step
+    
+    # Autoregressive: Model outputs predictions of t+2 from its own t+1 predictions
+    ar_predictions_dict, ar_ground_truth_dict = metrics.calculate_mare_autoregressive(
+      self.model, X_test, Y_test, target_col_indices, input_scaler, y_scaler, self.device, steps_per_run=100
+    )
+    
+    # Calculate MARE for each target
+    for idx, target_name in enumerate(target_names):
+      # Teacher-forcing MARE (from already-computed predictions)
+      tf_gt = tf_ground_truth[:, idx] if tf_ground_truth.ndim > 1 else tf_ground_truth
+      tf_pred = tf_predictions[:, idx] if tf_predictions.ndim > 1 else tf_predictions
+
+      mare_tf = metrics.mare(tf_gt, tf_pred)
+      
+      # Autoregressive MARE
+      ar_predictions = ar_predictions_dict[target_name]
+      ar_ground_truth = ar_ground_truth_dict[target_name]
+      
+      mare_ar = metrics.mare(ar_ground_truth, ar_predictions)
+      
+      # Log results
+      logger.info(f"\n{target_name}:")
+      logger.info(f"  MARE (Teacher-Forcing): {mare_tf:.6f}")
+      logger.info(f"  MARE (Autoregressive):  {mare_ar:.6f}")
+      
+      # Log to tensorboard/wandb
+      self.log(f'{target_name}/MARE_TeacherForcing', float(mare_tf))
+      self.log(f'{target_name}/MARE_Autoregressive', float(mare_ar))
+    
     # === Feature Importance (computed per output) ===
-    logger.info(f"\n{'='*60}")
+    logger.info(f"\n{'='*20}")
     logger.info("FEATURE IMPORTANCE ANALYSIS")
-    logger.info(f"{'='*60}")
+    logger.info(f"{'='*20}")
     
     feature_names = [key for key, _ in sorted(datamodule.col_index_map.items(), key=lambda x: x[1])]
     
@@ -312,13 +333,7 @@ class DNN_Model(L.LightningModule):
         output_idx=idx
       )
       plot.plot_feature_importance(
-        importance_means, 
-        importance_stds, 
-        feature_names, 
-        baseline_r2, 
-        output_dir, 
-        'r2_score', 
-        n_top=20
+        importance_means, importance_stds, feature_names, baseline_r2, output_dir, 'r2_score', n_top=20
       )
       
       # MSE-based feature importance for this output
@@ -329,70 +344,43 @@ class DNN_Model(L.LightningModule):
         output_idx=idx
       )
       plot.plot_feature_importance(
-        importance_means, 
-        importance_stds, 
-        feature_names, 
-        baseline_mse, 
-        output_dir, 
-        'mse_score', 
-        n_top=20
+        importance_means, importance_stds, feature_names, baseline_mse, output_dir, 'mse_score', n_top=20
       )
       
       logger.info(f"  ✓ Feature importance plots saved to: {output_dir}")
     
     # === PREDICTION COMPARISON (for each output) ===
-    logger.info(f"\n{'='*60}")
+    logger.info(f"\n{'='*20}")
     logger.info("PREDICTION COMPARISON (Teacher-Forcing vs Autoregressive)")
-    logger.info(f"{'='*60}")
+    logger.info(f"{'='*20}")
+
+    # Get first run from X_test for ground truth
+    first_run_length = 100  # steps_per_run
+    first_run_X = X_test[:first_run_length]
     
-    first_run = datamodule.first_run
-    col_index_map = datamodule.col_index_map
-    input_scaler = datamodule.input_scaler
-    y_scaler = datamodule.target_scaler
-    
-    first_run_original = data_scaler.inverse_transform_column_transformer(input_scaler, first_run)
-    
+    # Get ground truth for first run
+    first_run_original = data_scaler.inverse_transform_column_transformer(input_scaler, first_run_X)
+
+    # Plot for each target
     for idx, target_name in enumerate(target_names):
-      logger.info(f"\nPrediction comparison for: {target_name}")
+      logger.info(f"\nPlotting prediction comparison for: {target_name}")
       
       # Get ground truth for this target
       ground_truth = first_run_original[:, col_index_map[target_name]]
       
-      # Get teacher-forced predictions for this output
-      teacher_forced_preds = metrics.get_teacher_forced_predictions(
-        self.model, 
-        first_run, 
-        y_scaler, 
-        self.device,
-        output_idx=idx
-      )
+      # Get teacher-forced predictions for first run (already computed)
+      teacher_forced_preds = tf_predictions[:first_run_length-1, idx] if tf_predictions.ndim > 1 else tf_predictions[:first_run_length-1]
       
-      # Get autoregressive predictions for this output
-      autoregressive_preds = metrics.get_autoregressive_predictions(
-        self.model, 
-        first_run, 
-        col_index_map[target_name], 
-        input_scaler, 
-        y_scaler, 
-        self.device,
-        output_idx=idx
-      )
+      # Get autoregressive predictions for first run (already computed in ar_predictions_dict)
+      autoregressive_preds = ar_predictions_dict[target_name][:first_run_length-1]
       
       # Save to output-specific directory
       output_dir = os.path.join(self.result_dir, target_name)
       plot.plot_prediction_comparison(
-        ground_truth, 
-        teacher_forced_preds, 
-        autoregressive_preds, 
-        target_name, 
-        output_dir
+        ground_truth, teacher_forced_preds, autoregressive_preds, target_name, output_dir
       )
       
       logger.info(f"  ✓ Comparison plot saved to: {output_dir}")
-    
-    logger.info(f"\n{'='*60}")
-    logger.info("TESTING COMPLETE!")
-    logger.info(f"{'='*60}\n")
 
   def configure_optimizers(self):
     optimizer = torch.optim.AdamW(self.parameters(), lr=self.learning_rate, weight_decay=self.weight_decay)

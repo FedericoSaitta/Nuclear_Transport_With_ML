@@ -2,11 +2,60 @@
 from loguru import logger
 import numpy as np
 import torch 
+from sklearn.compose import ColumnTransformer
+import ML.datamodule.data_scalers as data_scaler
+from tqdm import tqdm
+  
+
+
+# These always return arrays even if with only one output (eg. [single_output])
+def mae(y_true, y_pred):
+    """Mean Absolute Error per output"""
+    result = np.mean(np.abs(y_true - y_pred), axis=0)
+    return np.atleast_1d(result)
+
+def mse(y_true, y_pred):
+    """Mean Squared Error per output"""
+    result = np.mean((y_true - y_pred) ** 2, axis=0)
+    return np.atleast_1d(result)
+
+def rmse(y_true, y_pred):
+    """Root Mean Squared Error per output"""
+    result = np.sqrt(mse(y_true, y_pred))
+    return np.atleast_1d(result)
+
+def r2(y_true, y_pred):
+    """R² (Coefficient of Determination) per output"""
+    n_outputs = y_true.shape[1] if y_true.ndim > 1 else 1
+    r2_scores = np.zeros(n_outputs)
+    if n_outputs == 1:
+        y_true = y_true.reshape(-1, 1)
+        y_pred = y_pred.reshape(-1, 1)
+    for i in range(n_outputs):
+        ss_res = np.sum((y_true[:, i] - y_pred[:, i]) ** 2)
+        ss_tot = np.sum((y_true[:, i] - np.mean(y_true[:, i])) ** 2)
+        r2_scores[i] = 1 - (ss_res / ss_tot) if ss_tot != 0 else 0.0
+    return np.atleast_1d(r2_scores)
+
+# Returns Float
+def mare(tf_gt, tf_pred):
+    tf_gt = np.asarray(tf_gt)
+    tf_pred = np.asarray(tf_pred)
+
+    max_val_tf = np.max(np.abs(tf_gt))
+    if max_val_tf > 0:
+        are_tf = np.abs(tf_gt - tf_pred) / max_val_tf
+        mare_tf = np.mean(are_tf)
+    else:
+        mare_tf = float('nan')
+
+    return mare_tf
+
+
 
 
 def calculate_feature_importance(model, test_loader, device, n_repeats=10, 
-                                 metric={'name': 'r2', 'direction': 'increasing'},
-                                 output_idx=None):
+                                 metric={'name': 'r2', 'direction': 'increasing'},output_idx=None):
   from sklearn.metrics import r2_score, mean_squared_error, mean_absolute_error
   
   # Prepare test data
@@ -113,115 +162,118 @@ def calculate_feature_importance(model, test_loader, device, n_repeats=10,
   return importance_means, importance_stds, baseline_score
 
 
-def get_teacher_forced_predictions(model, data, y_scaler, device, output_idx=0):
-  # Convert to tensor
-  data_tensor = torch.nan_to_num(torch.tensor(data, dtype=torch.float32), nan=-1)
-  data_tensor = data_tensor.to(device)
+def calculate_mare_autoregressive(model, X_data, Y_data, target_col_indices, x_scaler, y_scaler, device, steps_per_run=100):
+  """
+  Calculate MARE using autoregressive prediction with ALL outputs fed back.
   
-  # Get predictions
-  model.eval()
-  with torch.no_grad():
-    predictions_scaled = model(data_tensor).cpu().numpy()
+  Args:
+    model: Trained model
+    X_data: Input data array (scaled)
+    Y_data: Target data array (scaled) - these are the true next-step values
+    target_col_indices: Dict mapping target names to their column indices in X_data
+    x_scaler: Input scaler
+    y_scaler: Target scaler
+    device: Device to run model on
+    steps_per_run: Number of time steps per run
   
-  # Handle multi-output: extract specific output
-  if predictions_scaled.ndim == 2 and predictions_scaled.shape[1] > 1:
-    # Multi-output model
-    predictions_scaled = predictions_scaled[:, output_idx]
-  else:
-    # Single output or already 1D
-    predictions_scaled = predictions_scaled.flatten()
+  Returns:
+    predictions_dict: Dict of predictions for each target
+    ground_truth_dict: Dict of ground truth for each target
+  """
+  # Calculate number of complete runs
+  total_samples = len(X_data)
+  n_runs = total_samples // steps_per_run
   
-  # Inverse transform to original scale
-  # Need to handle ColumnTransformer vs single scaler
-  from sklearn.compose import ColumnTransformer
-  import ML.datamodule.data_scalers as data_scaler
-  
-  if isinstance(y_scaler, ColumnTransformer):
-    # For ColumnTransformer, create a dummy array with all outputs
-    dummy = np.zeros((len(predictions_scaled), y_scaler.n_features_in_))
-    dummy[:, output_idx] = predictions_scaled
-    predictions_original = data_scaler.inverse_transform_column_transformer(y_scaler, dummy)
-    predictions = predictions_original[:, output_idx]
-  else:
-    # Single scaler
-    predictions = y_scaler.inverse_transform(predictions_scaled.reshape(-1, 1)).flatten()
-  
-  # Trim last prediction to align with autoregressive
-  return predictions[:-1]
+  # Raise error if steps are not exactly divisible
+  if total_samples % steps_per_run != 0:
+    raise ValueError(f"Dataset has {total_samples} samples, trimming to {n_runs * steps_per_run} for complete runs")
 
-
-def get_autoregressive_predictions(model, data, target_col_idx, x_scaler, y_scaler, device, output_idx=0):
-  from sklearn.compose import ColumnTransformer
-  import ML.datamodule.data_scalers as data_scaler
+  # Get number of outputs and target names
+  n_outputs = Y_data.shape[1] if Y_data.ndim > 1 else 1
+  target_names = list(target_col_indices.keys())
   
-  predictions = []
+  logger.info(f"Running autoregressive predictions for {n_runs} runs ({steps_per_run} steps each)")
   
-  # Start with first time step
-  current_input = data[0:1].copy()
+  # Initialize storage for all targets
+  all_predictions = {name: [] for name in target_names}
+  all_ground_truth = {name: [] for name in target_names}
   
   model.eval()
   with torch.no_grad():
-    for step in range(len(data) - 1):
-      # Convert to tensor and predict
-      input_tensor = torch.nan_to_num(torch.tensor(current_input, dtype=torch.float32), nan=-1)
-      input_tensor = input_tensor.to(device)
+    for run_idx in tqdm(range(n_runs), desc="Autoregressive MARE", unit="run"):
+      # Get this run's data
+      run_start = run_idx * steps_per_run
+      run_end = run_start + steps_per_run
+      run_x_data = X_data[run_start:run_end]
+      run_y_data = Y_data[run_start:run_end]
       
-      pred_output = model(input_tensor).cpu().numpy()
+      # Start with first time step
+      current_input = run_x_data[0:1].copy()
       
-      # Handle multi-output: extract specific output
-      if pred_output.ndim == 2 and pred_output.shape[1] > 1:
-        pred_scaled = pred_output[0, output_idx]
-      else:
-        pred_scaled = pred_output.flatten()[0]
-      
-      predictions.append(pred_scaled)
-      
-      # Prepare next input
-      if step < len(data) - 1:
-        # Get features from next time step (everything except target)
-        current_input = data[step + 1:step + 2].copy()
+      for step in range(len(run_x_data) - 1):
+        # Predict ALL outputs
+        input_tensor = torch.nan_to_num(torch.tensor(current_input, dtype=torch.float32), nan=-1)
+        input_tensor = input_tensor.to(device)
+        pred_output = model(input_tensor).cpu().numpy()
         
-        # Step 1: Convert prediction from y_scaler space to original space
+        # pred_output shape: [1, n_outputs]
+        if pred_output.ndim == 1:
+          pred_output = pred_output.reshape(1, -1)
+        
+        # Convert ALL predictions from y_scaler space to original space
         if isinstance(y_scaler, ColumnTransformer):
-          # For ColumnTransformer - need all target dimensions
-          dummy_y = np.zeros((1, y_scaler.n_features_in_))
-          dummy_y[0, output_idx] = pred_scaled
-          pred_original_array = data_scaler.inverse_transform_column_transformer(y_scaler, dummy_y)
-          pred_original = pred_original_array[0, output_idx]
+          pred_original = data_scaler.inverse_transform_column_transformer(y_scaler, pred_output)
+          pred_original = pred_original[0]  # Get the single row
         else:
-          # Single scaler
-          pred_original = y_scaler.inverse_transform([[pred_scaled]])[0, 0]
+          pred_original = y_scaler.inverse_transform(pred_output)[0]
         
-        # Step 2: Convert from original space to x_scaler space
-        # Need to create a full row with the prediction in the correct column
-        if isinstance(x_scaler, ColumnTransformer):
-          # For ColumnTransformer, we need to transform properly
-          # Create a dummy row in ORIGINAL space with just the target value
-          dummy_x_original = np.zeros((1, data.shape[1]))
-          dummy_x_original[0, target_col_idx] = pred_original
+        # Store predictions for this step (for all targets)
+        for output_idx, target_name in enumerate(target_names):
+          all_predictions[target_name].append(pred_original[output_idx])
+        
+        # Prepare next input
+        if step < len(run_x_data) - 1:
+          current_input = run_x_data[step + 1:step + 2].copy()
           
-          # Transform to x_scaler space
-          dummy_x_scaled = x_scaler.transform(dummy_x_original)
-          pred_x_scaled = dummy_x_scaled[0, target_col_idx]
+          # Update ALL target columns with their predictions
+          for output_idx, target_name in enumerate(target_names):
+            target_col_idx = target_col_indices[target_name]
+            pred_val_original = pred_original[output_idx]
+            
+            # Convert from original space to x_scaler space
+            if isinstance(x_scaler, ColumnTransformer):
+              dummy_x_original = np.zeros((1, run_x_data.shape[1]))
+              dummy_x_original[0, target_col_idx] = pred_val_original
+              dummy_x_scaled = x_scaler.transform(dummy_x_original)
+              pred_x_scaled = dummy_x_scaled[0, target_col_idx]
+            else:
+              dummy_x_original = np.zeros((1, run_x_data.shape[1]))
+              dummy_x_original[0, target_col_idx] = pred_val_original
+              dummy_x_scaled = x_scaler.transform(dummy_x_original)
+              pred_x_scaled = dummy_x_scaled[0, target_col_idx]
+            
+            # Replace target column with prediction
+            current_input[0, target_col_idx] = pred_x_scaled
+      
+      # Get ground truth from Y_data for all targets
+      run_y_data_subset = run_y_data[:-1]  # Exclude last since we don't predict beyond run
+      
+      if isinstance(y_scaler, ColumnTransformer):
+        run_ground_truth_original = data_scaler.inverse_transform_column_transformer(y_scaler, run_y_data_subset)
+      else:
+        run_ground_truth_original = y_scaler.inverse_transform(run_y_data_subset)
+      
+      # Store ground truth for all targets
+      for output_idx, target_name in enumerate(target_names):
+        if run_ground_truth_original.ndim == 1:
+          all_ground_truth[target_name].extend(run_ground_truth_original)
         else:
-          # Single scaler - transform the whole row
-          dummy_x_original = np.zeros((1, data.shape[1]))
-          dummy_x_original[0, target_col_idx] = pred_original
-          dummy_x_scaled = x_scaler.transform(dummy_x_original)
-          pred_x_scaled = dummy_x_scaled[0, target_col_idx]
-        
-        # Replace target column with prediction
-        current_input[0, target_col_idx] = pred_x_scaled
+          all_ground_truth[target_name].extend(run_ground_truth_original[:, output_idx])
   
-  # Convert predictions to original scale for plotting
-  predictions = np.array(predictions)
+  # Convert lists to arrays
+  predictions_dict = {name: np.array(preds) for name, preds in all_predictions.items()}
+  ground_truth_dict = {name: np.array(gt) for name, gt in all_ground_truth.items()}
   
-  if isinstance(y_scaler, ColumnTransformer):
-    # For ColumnTransformer
-    dummy = np.zeros((len(predictions), y_scaler.n_features_in_))
-    dummy[:, output_idx] = predictions
-    predictions_original = data_scaler.inverse_transform_column_transformer(y_scaler, dummy)
-    return predictions_original[:, output_idx]
-  else:
-    # Single scaler
-    return y_scaler.inverse_transform(predictions.reshape(-1, 1)).flatten()
+  logger.info(f"Autoregressive predictions complete!")
+  
+  return predictions_dict, ground_truth_dict

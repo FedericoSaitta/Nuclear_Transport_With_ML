@@ -12,21 +12,19 @@ dataset:
     mod_density_g_cm3: "MinMax"
     boron_ppm: "MinMax"
     burnup_MWd_per_kg: "robust"
+    U235: "robust"
     U238: "robust"
-    U239: "robust"
-    Np239: "robust"
     Pu239: "robust"
+    Pu240: "robust"
     Pu241: "robust"
-    Am241: "robust"
   
   # Target features with scaling
   targets:
+    U235: "robust"
     U238: "robust"
-    U239: "robust"
-    Np239: "robust"
     Pu239: "robust"
+    Pu240: "robust"
     Pu241: "robust"
-    Am241: "robust"
 
   # Data loader configuration
   train:
@@ -35,7 +33,7 @@ dataset:
     batch_size: 8192 # As large as possible to speed up
 
 model:
-  name: "chain_gelu_test"
+  name: "mare_heavy_metal_gelu_test"
   layers: [64,64]         
   dropout_probability: 0.1
   activation: "gelu"  # Options: relu, tanh, sigmoid, leaky_relu, elu, gelu

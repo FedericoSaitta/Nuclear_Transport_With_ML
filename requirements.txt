@@ -7,3 +7,4 @@ torch
 pytorch-lightning
 omegaconf
 loguru
+tdqm

@@ -146,12 +146,80 @@ def create_timeseries_targets(data, time_col_idx, element_dict, target_elements)
   return X, y
 
 
-def scale_datasets(X_train, X_val, X_test, y_train, y_val, y_test, X_first_run, input_scaler, target_scaler):
+def timeseries_train_val_test_split(X, Y, train_frac=0.8, val_frac=0.1, test_frac=0.1, 
+                                     steps_per_run=100, shuffle_within_train=True):
+    # Validate fractions
+    if not np.isclose(train_frac + val_frac + test_frac, 1.0):
+        raise ValueError(f"Fractions must sum to 1.0, got {train_frac + val_frac + test_frac}")
+    
+    # Calculate total number of runs
+    total_samples = len(X)
+    total_runs = total_samples // steps_per_run
+    
+    if total_samples % steps_per_run != 0:
+        logger.warning(f"Total samples ({total_samples}) not evenly divisible by steps_per_run ({steps_per_run}). "
+                      f"Last {total_samples % steps_per_run} samples will be discarded.")
+        # Trim to exact multiple of steps_per_run
+        total_samples = total_runs * steps_per_run
+        X = X[:total_samples]
+        Y = Y[:total_samples]
+    
+    logger.info(f"Total runs detected: {total_runs}")
+    logger.info(f"Steps per run: {steps_per_run}")
+    
+    # Calculate number of runs for each split
+    n_train_runs = int(total_runs * train_frac)
+    n_val_runs = int(total_runs * val_frac)
+    n_test_runs = total_runs - n_train_runs - n_val_runs  # Remainder goes to test
+    
+    logger.info(f"Split: {n_train_runs} train runs, {n_val_runs} val runs, {n_test_runs} test runs")
+    
+    # Calculate indices
+    train_end_idx = n_train_runs * steps_per_run
+    val_end_idx = train_end_idx + (n_val_runs * steps_per_run)
+    
+    # Split data sequentially (first runs for train, middle for val, last for test)
+    X_train = X[:train_end_idx]
+    y_train = Y[:train_end_idx]
+    
+    X_val = X[train_end_idx:val_end_idx]
+    y_val = Y[train_end_idx:val_end_idx]
+    
+    X_test = X[val_end_idx:]
+    y_test = Y[val_end_idx:]
+    
+    logger.info(f"Before shuffle - Train: {len(X_train)}, Val: {len(X_val)}, Test: {len(X_test)}")
+    
+    # Optionally shuffle within training set (but keep time steps from same run together)
+    if shuffle_within_train and n_train_runs > 1:
+        # Create array of run indices
+        train_run_indices = np.arange(n_train_runs)
+        np.random.shuffle(train_run_indices)
+        
+        # Reorder entire runs
+        X_train_shuffled = []
+        y_train_shuffled = []
+        
+        for run_idx in train_run_indices:
+            start_idx = run_idx * steps_per_run
+            end_idx = start_idx + steps_per_run
+            X_train_shuffled.append(X_train[start_idx:end_idx])
+            y_train_shuffled.append(y_train[start_idx:end_idx])
+        
+        X_train = np.concatenate(X_train_shuffled, axis=0)
+        y_train = np.concatenate(y_train_shuffled, axis=0)
+        
+        logger.info("Training runs shuffled (keeping time steps within each run intact)")
+    
+    logger.info(f"Final split sizes - Train: {len(X_train)}, Val: {len(X_val)}, Test: {len(X_test)}")
+    
+    return X_train, X_val, X_test, y_train, y_val, y_test
+
+def scale_datasets(X_train, X_val, X_test, y_train, y_val, y_test, input_scaler, target_scaler):
   # Scale inputs
   X_train = input_scaler.fit_transform(X_train)
   X_val = input_scaler.transform(X_val)
   X_test = input_scaler.transform(X_test)
-  X_first_run = input_scaler.transform(X_first_run)
   
   # Scale targets - handle both single and multiple outputs
   # Ensure targets are 2D for sklearn scalers
@@ -169,8 +237,7 @@ def scale_datasets(X_train, X_val, X_test, y_train, y_val, y_test, X_first_run, 
   
   # REMOVED: The flattening logic that was causing inconsistency
   # Keep everything 2D for consistency
-  
-  return X_train, X_val, X_test, y_train, y_val, y_test, X_first_run
+  return X_train, X_val, X_test, y_train, y_val, y_test
 
 def create_tensor_datasets(X_train, X_val, X_test, y_train, y_val, y_test):
   # Convert inputs to tensors (replace NaN with -1)

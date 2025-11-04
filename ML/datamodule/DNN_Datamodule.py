@@ -72,18 +72,18 @@ class DNN_Datamodule(L.LightningDataModule):
 
     X, Y = data_help.create_timeseries_targets(data_arr, self.col_index_map['time_days'], self.col_index_map, list(self.target.keys()))
 
-    self.first_run = X[0:100, :]
-
     # Split data 80/10/10 -- Train/validation/Test
-    X_train, X_temp, y_train, y_temp = train_test_split(X, Y, test_size=0.2, random_state=0, shuffle=True)
-    X_val, X_test, y_val, y_test = train_test_split(X_temp, y_temp, test_size=0.5, shuffle=True, random_state=0)
+    # ===== Time-series aware split =====
+    X_train, X_val, X_test, y_train, y_val, y_test = data_help.timeseries_train_val_test_split(
+      X, Y, train_frac=0.8, val_frac=0.1, test_frac=0.1, steps_per_run=100, shuffle_within_train=True
+    )
     
     plot.plot_data_distributions(X_train, self.col_index_map, save_dir=self.result_dir, name='Raw_Inputs')
     plot.plot_data_distributions(y_train, target_index_map, save_dir=self.result_dir, name='Raw_Targets')
     
     # Scale all datasets
-    X_train, X_val, X_test, y_train, y_val, y_test, self.first_run = data_help.scale_datasets(
-      X_train, X_val, X_test, y_train, y_val, y_test, self.first_run, self.input_scaler, self.target_scaler
+    X_train, X_val, X_test, y_train, y_val, y_test = data_help.scale_datasets(
+      X_train, X_val, X_test, y_train, y_val, y_test, self.input_scaler, self.target_scaler
     )
 
     plot.plot_data_distributions(X_train, self.col_index_map, save_dir=self.result_dir, name='Scaled_Inputs')
