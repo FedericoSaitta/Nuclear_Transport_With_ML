@@ -124,19 +124,26 @@ def plot_data_distributions(X, col_index_map, save_dir=None, name='Raw_Data'):
   logger.info(f"Feature distributions saved to: {filepath}")
 
 def plot_losses(train_losses, val_losses, save_dir):
+  # Convert losses to log10 scale (add small epsilon to avoid log(0))
+  eps = 1e-10
+  log_train_losses = np.log10(np.array(train_losses) + eps)
+  log_val_losses = np.log10(np.array(val_losses) + eps)
+
   plt.figure(figsize=(10, 6))
-  plt.plot(train_losses, label='Training Loss', linewidth=2)
-  plt.plot(val_losses, label='Validation Loss', linewidth=2)
+  plt.plot(log_train_losses, label='Training Loss (log10)', linewidth=2)
+  plt.plot(log_val_losses, label='Validation Loss (log10)', linewidth=2)
   plt.xlabel('Epoch', fontsize=12)
-  plt.ylabel('Loss (MSE)', fontsize=12)
-  plt.title('Training and Validation Loss Over Time', fontsize=14)
+  plt.ylabel('Log10(Loss)', fontsize=12)
+  plt.title('Logarithm of Training and Validation Loss Over Time', fontsize=14)
   plt.legend(fontsize=10)
   plt.grid(True, alpha=0.3)
   plt.tight_layout()
-  filepath = os.path.join(save_dir, 'training_loss.png')
+
+  filepath = os.path.join(save_dir, 'training_loss_log.png')
   plt.savefig(filepath, dpi=300)
   plt.close()
-  logger.info(f"Train and Validation Losses saved to: {filepath}")
+
+  logger.info(f"Logarithmic Train and Validation Losses saved to: {filepath}")
 
 
 def plot_predictions_vs_actuals(actuals, predictions, mae, rmse, r2, plots_folder):

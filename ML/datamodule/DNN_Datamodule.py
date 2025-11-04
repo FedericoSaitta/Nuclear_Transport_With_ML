@@ -61,15 +61,14 @@ class DNN_Datamodule(L.LightningDataModule):
     data_df = data_help.filter_columns(data_df, list(self.inputs.keys()))
     data_arr, self.col_index_map = data_help.split_df(data_df)
     
-    target_index_map = {str(list(self.target.keys())[0]) : 0}
-    
+    target_index_map = {name: idx for idx, name in enumerate(self.target.keys())}
+    logger.info(f"Target index map: {target_index_map}")
 
     logger.info(f"Inputs chosen and their respective indices: {self.col_index_map}")
 
     # Create Column Transformers for inputs and get the scaler for the targets
     self.input_scaler = data_scalers.create_column_transformer(self.inputs, self.col_index_map)
-    self.target_scaler = list(self.target.values())[0]
-    logger.info(f"Target scaler type: {type(self.target_scaler).__name__}")
+    self.target_scaler = data_scalers.create_column_transformer(self.target, target_index_map)
 
     X, Y = data_help.create_timeseries_targets(data_arr, self.col_index_map['time_days'], self.col_index_map, list(self.target.keys()))
 

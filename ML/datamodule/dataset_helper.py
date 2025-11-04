@@ -153,13 +153,24 @@ def scale_datasets(X_train, X_val, X_test, y_train, y_val, y_test, X_first_run, 
   X_test = input_scaler.transform(X_test)
   X_first_run = input_scaler.transform(X_first_run)
   
-  # Scale targets
-  y_train = target_scaler.fit_transform(y_train.reshape(-1, 1)).flatten()
-  y_val = target_scaler.transform(y_val.reshape(-1, 1)).flatten()
-  y_test = target_scaler.transform(y_test.reshape(-1, 1)).flatten()
+  # Scale targets - handle both single and multiple outputs
+  # Ensure targets are 2D for sklearn scalers
+  if y_train.ndim == 1:
+    y_train = y_train.reshape(-1, 1)
+  if y_val.ndim == 1:
+    y_val = y_val.reshape(-1, 1)
+  if y_test.ndim == 1:
+    y_test = y_test.reshape(-1, 1)
+  
+  # Fit and transform targets
+  y_train = target_scaler.fit_transform(y_train)
+  y_val = target_scaler.transform(y_val)
+  y_test = target_scaler.transform(y_test)
+  
+  # REMOVED: The flattening logic that was causing inconsistency
+  # Keep everything 2D for consistency
   
   return X_train, X_val, X_test, y_train, y_val, y_test, X_first_run
-
 
 def create_tensor_datasets(X_train, X_val, X_test, y_train, y_val, y_test):
   # Convert inputs to tensors (replace NaN with -1)
@@ -167,7 +178,7 @@ def create_tensor_datasets(X_train, X_val, X_test, y_train, y_val, y_test):
   X_val_tensor = torch.nan_to_num(torch.tensor(X_val, dtype=torch.float32), nan=-1)
   X_test_tensor = torch.nan_to_num(torch.tensor(X_test, dtype=torch.float32), nan=-1)
   
-  # Convert targets to tensors
+  # Convert targets to tensors - should already be 2D from scale_datasets
   y_train_tensor = torch.tensor(y_train, dtype=torch.float32)
   y_val_tensor = torch.tensor(y_val, dtype=torch.float32)
   y_test_tensor = torch.tensor(y_test, dtype=torch.float32)

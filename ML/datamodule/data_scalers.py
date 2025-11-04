@@ -71,6 +71,14 @@ def print_transformer_summary(column_transformer, col_index_map):
 
 
 def create_column_transformer(scaler_dict, col_index_map):
+    # If only one column, return the scaler directly (like old single-target code)
+    if len(scaler_dict) == 1:
+        col_name = list(scaler_dict.keys())[0]
+        scaler = scaler_dict[col_name]
+        logger.info(f"Using single scaler for '{col_name}': {scaler.__class__.__name__}")
+        return scaler
+    
+    # Multiple columns - use ColumnTransformer
     transformers = []
     
     # Sort columns by their index to maintain original order
@@ -100,6 +108,12 @@ def create_column_transformer(scaler_dict, col_index_map):
 
 
 def inverse_transform_column_transformer(column_transformer, X):
+  # Handle single scaler (not a ColumnTransformer)
+  if not isinstance(column_transformer, ColumnTransformer):
+    # It's a single scaler
+    return column_transformer.inverse_transform(X)
+  
+  # Handle ColumnTransformer
   X_original = X.copy()
   
   for name, transformer, columns in column_transformer.transformers_:

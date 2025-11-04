@@ -27,26 +27,22 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
 class SimpleDNN(nn.Module):
-  def __init__(self, n_inputs, hidden_layers, dropout_prob, activation, output_activation):
+  def __init__(self, n_inputs, n_outputs, hidden_layers, dropout_prob, activation, output_activation, residual):
     super(SimpleDNN, self).__init__()
-    
-    layer_sizes = [n_inputs] + hidden_layers + [1]
-    
+    self.residual = residual
+
+    layer_sizes = [n_inputs] + hidden_layers + [n_outputs]
     self.layers = nn.ModuleList([
       nn.Linear(in_size, out_size)
       for in_size, out_size in zip(layer_sizes[:-1], layer_sizes[1:])
     ])
-    
     self.dropout = nn.Dropout(p=dropout_prob)
-    
-    # Activation function mapping
+
     self.activation_fn = self._get_activation(activation)
     self.output_activation_fn = self._get_activation(output_activation)
-  
+
   def _get_activation(self, activation):
-    """Get activation function by name"""
     activations = {
       'relu': nn.ReLU(),
       'tanh': nn.Tanh(),
@@ -59,28 +55,37 @@ class SimpleDNN(nn.Module):
       'none': nn.Identity()
     }
     return activations.get(activation.lower(), nn.ReLU())
-  
+
   def forward(self, x):
-    # Hidden layers with activation and dropout
-    for layer in self.layers[:-1]:
+    for i, layer in enumerate(self.layers[:-1]):
+      residual = x  # store input for skip connection
       x = layer(x)
       x = self.activation_fn(x)
       x = self.dropout(x)
-    
-    # Output layer
+
+      # Only add residual if dimensions match and flag is True
+      if self.residual and x.shape == residual.shape:
+        x = x + residual
+
     y = self.layers[-1](x)
     y = self.output_activation_fn(y)
     return y
-
 
 class DNN_Model(L.LightningModule):
   def __init__(self, config_object : DictConfig):
     super().__init__()
 
+    self.n_outputs = len(config_object.dataset.targets)
     self.dropout_prob = config_object.train.dropout_probability
     self.NN_layers = config_object.model.layers
     self.activation = config_object.model.activation
     self.output_activation = config_object.model.output_activation
+    self.residual_connections = config_object.model.residual_connections
+
+    ## If residual connections are turned on but layer inputs and outputs dont match they wont be used
+    self.residual_map = [(in_size == out_size) for in_size, out_size in zip(self.NN_layers[:-1], self.NN_layers[1:])]
+    if self.residual_connections and not any(self.residual_map):
+      logger.error("Residual connections requested, but no adjacent layers have matching input/output dimensions.")
     
     self.learning_rate = config_object.train.learning_rate
     self.weight_decay = config_object.train.weight_decay
@@ -93,11 +98,6 @@ class DNN_Model(L.LightningModule):
     # Keep track of losses
     self.train_losses = []
     self.val_losses = []
-
-    # Metrics
-    self.mae = torchmetrics.MeanAbsoluteError()
-    self.mse = torchmetrics.MeanSquaredError()
-    self.r2 = torchmetrics.R2Score()
 
     # Results
     self.result_dir = 'results/' + config_object.model.name + '/'
@@ -114,16 +114,16 @@ class DNN_Model(L.LightningModule):
     
     # Create the model based 
     input_dim = dm.train_dataset.tensors[0].shape[1]
-    self.model = SimpleDNN(input_dim, self.NN_layers, self.dropout_prob, self.activation, self.output_activation)
+    output_dim = self.n_outputs
+    self.model = SimpleDNN(input_dim, output_dim, self.NN_layers, self.dropout_prob, self.activation, self.output_activation, self.residual_connections)
 
   # Gets called for each train batch
   def training_step(self, batch, batch_idx):
     x, y = batch
-    y_hat = self.model(x).squeeze()
+    y_hat = self.model(x)
+ 
     loss = self.loss_fn(y_hat, y)
-
     self.log('train_loss', loss, on_step=False, on_epoch=True, prog_bar=True)
-    self.log('lr', self.optimizers().param_groups[0]['lr'], on_epoch=True, prog_bar=True)
     return loss
 
   # Gets called for each train epoch
@@ -142,9 +142,10 @@ class DNN_Model(L.LightningModule):
   # Gets called called for each validation batch
   def validation_step(self, batch, batch_idx):
     x, y = batch
-    y_hat = self.model(x).squeeze()
+    y_hat = self.model(x)
+    
+    # No shape manipulation needed - everything is already 2D from scale_datasets
     loss = self.loss_fn(y_hat, y)
-
     self.log('val_loss', loss, on_epoch=True, prog_bar=True)
     return loss
 
@@ -160,86 +161,238 @@ class DNN_Model(L.LightningModule):
 
     target_scaler = self.trainer.datamodule.target_scaler
 
-    # Move to CPU and reshape for sklearn
-    y_cpu = y.cpu()
-    preds_cpu = preds.cpu()
+    # Move to CPU
+    y_cpu = y.cpu().numpy()
+    preds_cpu = preds.cpu().numpy()
     
-    # Ensure 2D shape for sklearn scaler
-    if y_cpu.ndim == 1:
-      y_cpu = y_cpu.reshape(-1, 1)
-    if preds_cpu.ndim == 1:
-      preds_cpu = preds_cpu.reshape(-1, 1)
+    # No shape manipulation needed - everything is already 2D from scale_datasets
+    labels = data_scaler.inverse_transform_column_transformer(target_scaler, y_cpu)
+    predictions = data_scaler.inverse_transform_column_transformer(target_scaler, preds_cpu)
 
-    return {"labels": torch.from_numpy(target_scaler.inverse_transform(y_cpu.numpy())),
-            "predictions": torch.from_numpy(target_scaler.inverse_transform(preds_cpu.numpy()))}
+    return {
+      "labels": torch.from_numpy(labels),
+      "predictions": torch.from_numpy(predictions)
+    }
 
   # Gets called for each test batch
   def test_step(self, batch, batch_idx):
-    x, y = batch
-    y_hat = self.model(x).squeeze()
-    for metric in [self.mae, self.mse, self.r2]:
-      metric.update(y_hat, y)
-
+    pass
+  
   # Gets called for each test epoch
   def on_test_epoch_end(self):
+
     # Manually run prediction over test set
     datamodule = self.trainer.datamodule
     loader = datamodule.test_dataloader()
     y_true_list, y_pred_list = [], []
     for batch in loader:
       batch = self.transfer_batch_to_device(batch, self.device, 0)
-      res = self.predict_step(batch, batch_idx=0)   # use predict_step to get {"labels","predictions"}
+      res = self.predict_step(batch, batch_idx=0)
       y_true_list.append(res["labels"].cpu())
       y_pred_list.append(res["predictions"].cpu())
-        
-    y_true_test = torch.cat(y_true_list).cpu().detach().numpy().squeeze()
-    y_pred_test = torch.cat(y_pred_list).cpu().detach().numpy().squeeze()
 
-    plot.plot_predictions_vs_actuals(y_true_test, y_pred_test, self.mae.compute().item(), np.sqrt(self.mse.compute().item()), self.r2.compute().item(), self.result_dir)
-    plot.plot_residuals_combined(y_true_test, y_pred_test, self.result_dir)
+    y_true_test = torch.cat(y_true_list).cpu().detach().numpy()
+    y_pred_test = torch.cat(y_pred_list).cpu().detach().numpy()
 
-    # Compute MARE
-    ARE = np.abs(y_true_test - y_pred_test) / np.max(y_true_test)
-    logger.info(f'MARE: {sum(ARE) / len(ARE)}')
-
-    self.log('Mean Absolute Error', self.mae.compute())
-    self.log('Mean Squared Error', self.mse.compute())
-    self.log('R-squared coefficient', self.r2.compute())
-
-    # Plot feature importances for R2 score and MSE
+    # Get target names
+    target_names = list(datamodule.target.keys())
+    
+    # Ensure data is 2D for multi-output handling
+    if y_true_test.ndim == 1:
+      y_true_test = y_true_test.reshape(-1, 1)
+    if y_pred_test.ndim == 1:
+      y_pred_test = y_pred_test.reshape(-1, 1)
+    
+    logger.info(f"Test set shape - True: {y_true_test.shape}, Pred: {y_pred_test.shape}")
+    
+    # Compute per-output metrics manually using numpy
+    mae_per_output = np.mean(np.abs(y_true_test - y_pred_test), axis=0)
+    mse_per_output = np.mean((y_true_test - y_pred_test) ** 2, axis=0)
+    rmse_per_output = np.sqrt(mse_per_output)
+    
+    # Compute R² per output manually
+    r2_per_output = np.zeros(y_true_test.shape[1])
+    for i in range(y_true_test.shape[1]):
+      ss_res = np.sum((y_true_test[:, i] - y_pred_test[:, i]) ** 2)
+      ss_tot = np.sum((y_true_test[:, i] - np.mean(y_true_test[:, i])) ** 2)
+      r2_per_output[i] = 1 - (ss_res / ss_tot) if ss_tot != 0 else 0.0
+    
+    # Ensure all metrics are arrays
+    if mae_per_output.ndim == 0:
+      mae_per_output = np.array([mae_per_output])
+    if mse_per_output.ndim == 0:
+      mse_per_output = np.array([mse_per_output])
+    if rmse_per_output.ndim == 0:
+      rmse_per_output = np.array([rmse_per_output])
+    
+    # Log overall averaged metrics
+    logger.info(f"\n{'='*60}")
+    logger.info(f"OVERALL METRICS (averaged across {len(target_names)} outputs)")
+    logger.info(f"{'='*60}")
+    logger.info(f"Overall MAE: {mae_per_output.mean():.4f}")
+    logger.info(f"Overall RMSE: {rmse_per_output.mean():.4f}")
+    logger.info(f"Overall R²: {r2_per_output.mean():.4f}")
+    
+    self.log('Mean Absolute Error (avg)', float(mae_per_output.mean()))
+    self.log('Root Mean Squared Error (avg)', float(rmse_per_output.mean()))
+    self.log('R-squared coefficient (avg)', float(r2_per_output.mean()))
+    
+    # === Process each output separately ===
+    for idx, target_name in enumerate(target_names):
+      logger.info(f"\n{'='*60}")
+      logger.info(f"Output {idx+1}/{len(target_names)}: {target_name}")
+      logger.info(f"{'='*60}")
+      
+      # Extract data for this output
+      y_true_output = y_true_test[:, idx]
+      y_pred_output = y_pred_test[:, idx]
+      
+      # Get metrics for this output
+      mae_output = mae_per_output[idx]
+      mse_output = mse_per_output[idx]
+      rmse_output = rmse_per_output[idx]
+      r2_output = r2_per_output[idx]
+      
+      logger.info(f"MAE:  {mae_output:.6f}")
+      logger.info(f"MSE:  {mse_output:.6f}")
+      logger.info(f"RMSE: {rmse_output:.6f}")
+      logger.info(f"R²:   {r2_output:.6f}")
+      
+      # Compute MARE for this output
+      max_val = np.max(np.abs(y_true_output))
+      if max_val > 0:
+        ARE = np.abs(y_true_output - y_pred_output) / max_val
+        mare_output = np.mean(ARE)
+        logger.info(f'MARE: {mare_output:.6f}')
+        self.log(f'MARE_{target_name}', float(mare_output))
+      else:
+        logger.warning(f'Cannot compute MARE for {target_name}: max value is 0')
+      
+      # Compute additional statistics
+      mean_error = np.mean(y_pred_output - y_true_output)
+      std_error = np.std(y_pred_output - y_true_output)
+      logger.info(f"Mean Error: {mean_error:.6f} ± {std_error:.6f}")
+      
+      # Create output-specific directory
+      output_dir = os.path.join(self.result_dir, target_name)
+      os.makedirs(output_dir, exist_ok=True)
+      
+      # Plot predictions vs actuals for this output
+      plot.plot_predictions_vs_actuals(
+        y_true_output, 
+        y_pred_output, 
+        mae_output, 
+        rmse_output, 
+        r2_output, 
+        output_dir
+      )
+      
+      # Plot residuals for this output
+      plot.plot_residuals_combined(y_true_output, y_pred_output, output_dir)
+      
+      logger.info(f"Plots saved to: {output_dir}")
+    
+    # === Feature Importance (computed per output) ===
+    logger.info(f"\n{'='*60}")
+    logger.info("FEATURE IMPORTANCE ANALYSIS")
+    logger.info(f"{'='*60}")
+    
     feature_names = [key for key, _ in sorted(datamodule.col_index_map.items(), key=lambda x: x[1])]
-
-    importance_means, importance_stds, baseline_r2 = metrics.calculate_feature_importance(
-      self.model, loader, self.device, n_repeats=5, metric={'name': 'r2', 'direction': 'increasing'}
-    )
-    plot.plot_feature_importance(importance_means, importance_stds, feature_names, baseline_r2, self.result_dir, 'r2_score', n_top=20)
-
-    importance_means, importance_stds, baseline_mse = metrics.calculate_feature_importance(
-      self.model, loader, self.device, n_repeats=5, metric={'name': 'mse', 'direction': 'decreasing'}
-    )
-    plot.plot_feature_importance(importance_means, importance_stds, feature_names, baseline_mse, self.result_dir, 'mse_score', n_top=20)
-
-    # ===== PREDICTION COMPARISON ===== #
-    # Get ground truth in original scale
+    
+    for idx, target_name in enumerate(target_names):
+      logger.info(f"\nComputing feature importance for: {target_name}")
+      
+      output_dir = os.path.join(self.result_dir, target_name)
+      
+      # R2-based feature importance for this output
+      logger.info(f"  Computing R²-based feature importance...")
+      importance_means, importance_stds, baseline_r2 = metrics.calculate_feature_importance(
+        self.model, loader, self.device, n_repeats=5, 
+        metric={'name': 'r2', 'direction': 'increasing'},
+        output_idx=idx
+      )
+      plot.plot_feature_importance(
+        importance_means, 
+        importance_stds, 
+        feature_names, 
+        baseline_r2, 
+        output_dir, 
+        'r2_score', 
+        n_top=20
+      )
+      
+      # MSE-based feature importance for this output
+      logger.info(f"  Computing MSE-based feature importance...")
+      importance_means, importance_stds, baseline_mse = metrics.calculate_feature_importance(
+        self.model, loader, self.device, n_repeats=5, 
+        metric={'name': 'mse', 'direction': 'decreasing'},
+        output_idx=idx
+      )
+      plot.plot_feature_importance(
+        importance_means, 
+        importance_stds, 
+        feature_names, 
+        baseline_mse, 
+        output_dir, 
+        'mse_score', 
+        n_top=20
+      )
+      
+      logger.info(f"  ✓ Feature importance plots saved to: {output_dir}")
+    
+    # === PREDICTION COMPARISON (for each output) ===
+    logger.info(f"\n{'='*60}")
+    logger.info("PREDICTION COMPARISON (Teacher-Forcing vs Autoregressive)")
+    logger.info(f"{'='*60}")
+    
     first_run = datamodule.first_run
     col_index_map = datamodule.col_index_map
-    target_name = datamodule.target
     input_scaler = datamodule.input_scaler
     y_scaler = datamodule.target_scaler
-
-    target_name = datamodule.target
-    input_scaler = datamodule.input_scaler
-    y_scaler = datamodule.target_scaler
-
+    
     first_run_original = data_scaler.inverse_transform_column_transformer(input_scaler, first_run)
-    ground_truth = first_run_original[:, col_index_map[target_name]]
-
-    # Get teacher-forced predictions
-    teacher_forced_preds = metrics.get_teacher_forced_predictions(self.model, first_run, y_scaler, self.device)
-    autoregressive_preds = metrics.get_autoregressive_predictions(self.model, first_run, col_index_map[target_name], input_scaler, y_scaler, self.device)
-    plot.plot_prediction_comparison(ground_truth, teacher_forced_preds, autoregressive_preds, target_name, self.result_dir)
-
-    for metric in [self.mae, self.mse, self.r2]: metric.reset()
+    
+    for idx, target_name in enumerate(target_names):
+      logger.info(f"\nPrediction comparison for: {target_name}")
+      
+      # Get ground truth for this target
+      ground_truth = first_run_original[:, col_index_map[target_name]]
+      
+      # Get teacher-forced predictions for this output
+      teacher_forced_preds = metrics.get_teacher_forced_predictions(
+        self.model, 
+        first_run, 
+        y_scaler, 
+        self.device,
+        output_idx=idx
+      )
+      
+      # Get autoregressive predictions for this output
+      autoregressive_preds = metrics.get_autoregressive_predictions(
+        self.model, 
+        first_run, 
+        col_index_map[target_name], 
+        input_scaler, 
+        y_scaler, 
+        self.device,
+        output_idx=idx
+      )
+      
+      # Save to output-specific directory
+      output_dir = os.path.join(self.result_dir, target_name)
+      plot.plot_prediction_comparison(
+        ground_truth, 
+        teacher_forced_preds, 
+        autoregressive_preds, 
+        target_name, 
+        output_dir
+      )
+      
+      logger.info(f"  ✓ Comparison plot saved to: {output_dir}")
+    
+    logger.info(f"\n{'='*60}")
+    logger.info("TESTING COMPLETE!")
+    logger.info(f"{'='*60}\n")
 
   def configure_optimizers(self):
     optimizer = torch.optim.AdamW(self.parameters(), lr=self.learning_rate, weight_decay=self.weight_decay)
