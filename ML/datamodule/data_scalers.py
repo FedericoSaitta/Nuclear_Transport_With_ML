@@ -107,7 +107,7 @@ def create_column_transformer(scaler_dict, col_index_map):
     return column_transformer
 
 
-def inverse_transform_column_transformer(column_transformer, X):
+def inverse_transformer(column_transformer, X):
   # Handle single scaler (not a ColumnTransformer)
   if not isinstance(column_transformer, ColumnTransformer):
     # It's a single scaler

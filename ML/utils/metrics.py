@@ -161,119 +161,102 @@ def calculate_feature_importance(model, test_loader, device, n_repeats=10,
   
   return importance_means, importance_stds, baseline_score
 
+def get_model_prediction(model, input, y_scaler):
+    # Ensure input is 2D: (1, n_features)
+    if input.ndim == 1:
+      input = input.reshape(1, -1)
+    
+    input_tensor = torch.tensor(input, dtype=torch.float32)
+    
+    # Move input to the same device as the model
+    device = next(model.parameters()).device
+    input_tensor = input_tensor.to(device)
+    
+    model.eval()
+    with torch.no_grad():
+        prediction_scaled = model(input_tensor)  # Shape: (1, n_targets)
+    
+    # Convert back to numpy - ensure 2D
+    prediction_scaled = prediction_scaled.cpu().numpy()
+    if prediction_scaled.ndim == 1:
+      prediction_scaled = prediction_scaled.reshape(1, -1)
+    
+    # Inverse transform to get original scale - pass 2D array, not list
+    prediction_original = data_scaler.inverse_transformer(y_scaler, prediction_scaled)
+    return prediction_original
+def get_model_prediction(model, input, y_scaler):
+    # Ensure input is 2D: (1, n_features)
+    if input.ndim == 1:
+        input = input.reshape(1, -1)
+    
+    input_tensor = torch.tensor(input, dtype=torch.float32)
+    
+    # Move input to the same device as the model
+    device = next(model.parameters()).device
+    input_tensor = input_tensor.to(device)
+    
+    model.eval()
+    with torch.no_grad():
+        prediction_scaled = model(input_tensor)  # Shape: (1, n_targets)
+    
+    # Convert back to numpy - ensure 2D
+    prediction_scaled = prediction_scaled.cpu().numpy()
+    if prediction_scaled.ndim == 1:
+        prediction_scaled = prediction_scaled.reshape(1, -1)
+    
+    # Inverse transform to get original scale - pass 2D array, not list
+    prediction_original = data_scaler.inverse_transformer(y_scaler, prediction_scaled)
+    return prediction_original
 
-def calculate_mare_autoregressive(model, X_data, Y_data, target_col_indices, x_scaler, y_scaler, device, steps_per_run=100):
-  """
-  Calculate MARE using autoregressive prediction with ALL outputs fed back.
-  
-  Args:
-    model: Trained model
-    X_data: Input data array (scaled)
-    Y_data: Target data array (scaled) - these are the true next-step values
-    target_col_indices: Dict mapping target names to their column indices in X_data
-    x_scaler: Input scaler
-    y_scaler: Target scaler
-    device: Device to run model on
-    steps_per_run: Number of time steps per run
-  
-  Returns:
-    predictions_dict: Dict of predictions for each target
-    ground_truth_dict: Dict of ground truth for each target
-  """
-  # Calculate number of complete runs
-  total_samples = len(X_data)
-  n_runs = total_samples // steps_per_run
-  
-  # Raise error if steps are not exactly divisible
-  if total_samples % steps_per_run != 0:
-    raise ValueError(f"Dataset has {total_samples} samples, trimming to {n_runs * steps_per_run} for complete runs")
+def model_autoregress(model, X_data, Y_data, x_scaler, y_scaler, steps_per_run, inputs_indices, target_col_indices):
+    total_samples = len(X_data)
+    n_runs = total_samples // steps_per_run
+    
+    if total_samples % steps_per_run != 0:
+        logger.warning(f"Dataset has {total_samples} samples, not divisible by {steps_per_run}")
+        total_samples = n_runs * steps_per_run
+        X_data = X_data[:total_samples]
+        Y_data = Y_data[:total_samples]
 
-  # Get number of outputs and target names
-  n_outputs = Y_data.shape[1] if Y_data.ndim > 1 else 1
-  target_names = list(target_col_indices.keys())
-  
-  logger.info(f"Running autoregressive predictions for {n_runs} runs ({steps_per_run} steps each)")
-  
-  # Initialize storage for all targets
-  all_predictions = {name: [] for name in target_names}
-  all_ground_truth = {name: [] for name in target_names}
-  
-  model.eval()
-  with torch.no_grad():
-    for run_idx in tqdm(range(n_runs), desc="Autoregressive MARE", unit="run"):
-      # Get this run's data
-      run_start = run_idx * steps_per_run
-      run_end = run_start + steps_per_run
-      run_x_data = X_data[run_start:run_end]
-      run_y_data = Y_data[run_start:run_end]
-      
-      # Start with first time step
-      current_input = run_x_data[0:1].copy()
-      
-      for step in range(len(run_x_data) - 1):
-        # Predict ALL outputs
-        input_tensor = torch.nan_to_num(torch.tensor(current_input, dtype=torch.float32), nan=-1)
-        input_tensor = input_tensor.to(device)
-        pred_output = model(input_tensor).cpu().numpy()
-        
-        # pred_output shape: [1, n_outputs]
-        if pred_output.ndim == 1:
-          pred_output = pred_output.reshape(1, -1)
-        
-        # Convert ALL predictions from y_scaler space to original space
-        if isinstance(y_scaler, ColumnTransformer):
-          pred_original = data_scaler.inverse_transform_column_transformer(y_scaler, pred_output)
-          pred_original = pred_original[0]  # Get the single row
-        else:
-          pred_original = y_scaler.inverse_transform(pred_output)[0]
-        
-        # Store predictions for this step (for all targets)
-        for output_idx, target_name in enumerate(target_names):
-          all_predictions[target_name].append(pred_original[output_idx])
-        
-        # Prepare next input
-        if step < len(run_x_data) - 1:
-          current_input = run_x_data[step + 1:step + 2].copy()
-          
-          # Update ALL target columns with their predictions
-          for output_idx, target_name in enumerate(target_names):
-            target_col_idx = target_col_indices[target_name]
-            pred_val_original = pred_original[output_idx]
+    unscaled_x_data = data_scaler.inverse_transformer(x_scaler, X_data)
+
+    logger.info(f"Running autoregressive predictions for {n_runs} runs ({steps_per_run} steps each)")
+    logger.info(steps_per_run)
+
+    # Initialize dictionaries with empty lists for each target
+    predictions_dict = {target_name: [] for target_name in target_col_indices.keys()}
+    ground_truth_dict = {target_name: [] for target_name in target_col_indices.keys()}
+    
+    for depletion_run in tqdm(range(n_runs), desc="Autoregressive MARE", unit="run"):
+        run_start = depletion_run * steps_per_run
+        run_end = run_start + steps_per_run
+
+        for run_idx in range(run_start, run_end):
+            # Get model prediction
+            model_output_unscaled = get_model_prediction(model, X_data[run_idx], y_scaler)
             
-            # Convert from original space to x_scaler space
-            if isinstance(x_scaler, ColumnTransformer):
-              dummy_x_original = np.zeros((1, run_x_data.shape[1]))
-              dummy_x_original[0, target_col_idx] = pred_val_original
-              dummy_x_scaled = x_scaler.transform(dummy_x_original)
-              pred_x_scaled = dummy_x_scaled[0, target_col_idx]
-            else:
-              dummy_x_original = np.zeros((1, run_x_data.shape[1]))
-              dummy_x_original[0, target_col_idx] = pred_val_original
-              dummy_x_scaled = x_scaler.transform(dummy_x_original)
-              pred_x_scaled = dummy_x_scaled[0, target_col_idx]
-            
-            # Replace target column with prediction
-            current_input[0, target_col_idx] = pred_x_scaled
-      
-      # Get ground truth from Y_data for all targets
-      run_y_data_subset = run_y_data[:-1]  # Exclude last since we don't predict beyond run
-      
-      if isinstance(y_scaler, ColumnTransformer):
-        run_ground_truth_original = data_scaler.inverse_transform_column_transformer(y_scaler, run_y_data_subset)
-      else:
-        run_ground_truth_original = y_scaler.inverse_transform(run_y_data_subset)
-      
-      # Store ground truth for all targets
-      for output_idx, target_name in enumerate(target_names):
-        if run_ground_truth_original.ndim == 1:
-          all_ground_truth[target_name].extend(run_ground_truth_original)
-        else:
-          all_ground_truth[target_name].extend(run_ground_truth_original[:, output_idx])
-  
-  # Convert lists to arrays
-  predictions_dict = {name: np.array(preds) for name, preds in all_predictions.items()}
-  ground_truth_dict = {name: np.array(gt) for name, gt in all_ground_truth.items()}
-  
-  logger.info(f"Autoregressive predictions complete!")
-  
-  return predictions_dict, ground_truth_dict
+            # Get ground truth
+            ground_truth_unscaled = data_scaler.inverse_transformer(y_scaler, Y_data[run_idx].reshape(1, -1))
+
+            # Save results for each target element
+            for target_name, target_index in target_col_indices.items():
+                predictions_dict[target_name].append(model_output_unscaled[0, target_index])
+                ground_truth_dict[target_name].append(ground_truth_unscaled[0, target_index])
+
+            # If not on the last step, update the next timestep's input
+            if run_idx < run_end - 1:
+                # Put the model's output in the unscaled data
+                for target_name, target_index in target_col_indices.items():
+                    unscaled_x_data[run_idx + 1, inputs_indices[target_name]] = model_output_unscaled[0, target_index]
+
+                # Transform back to scaled space
+                X_data[run_idx + 1] = x_scaler.transform(unscaled_x_data[run_idx + 1].reshape(1, -1))[0]
+    
+    # Convert lists to numpy arrays
+    for target_name in target_col_indices.keys():
+        predictions_dict[target_name] = np.array(predictions_dict[target_name])
+        ground_truth_dict[target_name] = np.array(ground_truth_dict[target_name])
+    
+    logger.info(f"Collected predictions for targets: {list(predictions_dict.keys())}")
+    
+    return predictions_dict, ground_truth_dict

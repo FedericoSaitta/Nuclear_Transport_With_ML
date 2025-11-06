@@ -8,7 +8,6 @@ dataset:
     int_p_W: "robust"
     fuel_temp_K: "MinMax"
     mod_temp_K: "MinMax"
-    clad_temp_K: "MinMax"
     mod_density_g_cm3: "MinMax"
     boron_ppm: "MinMax"
     burnup_MWd_per_kg: "robust"
@@ -26,6 +25,8 @@ dataset:
     Pu240: "robust"
     Pu241: "robust"
 
+  target_delta_conc: False # Uses concentration differences instead of absolute values as targets
+
   # Data loader configuration
   train:
     batch_size: 1024  # Size is important for learning kinematics
@@ -33,19 +34,19 @@ dataset:
     batch_size: 8192 # As large as possible to speed up
 
 model:
-  name: "mare_heavy_metal_gelu_test"
-  layers: [64,64]         
+  name: "testing_code"
+  layers: [64, 64]         
   dropout_probability: 0.1
   activation: "gelu"  # Options: relu, tanh, sigmoid, leaky_relu, elu, gelu
   output_activation: "none"  # Options: none, sigmoid, tanh, softplus
-  residual_connections: True
+  residual_connections: False
 
 train:
   loss: "mse"
-  learning_rate: 1.0e-5
+  learning_rate: 5.0e-5
   weight_decay: 5.0e-4
   lr_scheduler_patience: 10
-  num_epochs: 1000
+  num_epochs: 2000
   early_stopping_patience: 20
 
   dropout_probability: 0.1   
@@ -60,4 +61,4 @@ runtime:
   device: "cuda"
   seed: 42
   drop_last: false
-  num_workers: 10
+  num_workers: 14

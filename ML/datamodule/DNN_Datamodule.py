@@ -32,6 +32,7 @@ class DNN_Datamodule(L.LightningDataModule):
     # Get the inputs and target dictionaries that include their respective scaling
     self.inputs = data_scalers.create_scaler_dict(dataset_cfg['inputs'])
     self.target = data_scalers.create_scaler_dict(dataset_cfg['targets'])
+    self.delta_conc = dataset_cfg.target_delta_conc
 
     # Check that target is present in inputs
     target_keys = set(self.target.keys())
@@ -49,20 +50,20 @@ class DNN_Datamodule(L.LightningDataModule):
     self._has_setup = False
   
   def setup(self, stage: str):
-    if self._has_setup: 
-      return
+    if self._has_setup: return
     self._has_setup = True
 
     logger.info("Setting up the data module...")
 
-    data_df = data_help.read_data(self.path_to_data, self.fraction_of_data, drop_run_label=True)
+    data_df, self.run_length = data_help.read_data(self.path_to_data, self.fraction_of_data, drop_run_label=True)
     data_help.print_dataset_stats(data_df)
 
     data_df = data_help.filter_columns(data_df, list(self.inputs.keys()))
-    data_arr, self.col_index_map = data_help.split_df(data_df)
+    self.data_arr, self.col_index_map = data_help.split_df(data_df)
     
     target_index_map = {name: idx for idx, name in enumerate(self.target.keys())}
     logger.info(f"Target index map: {target_index_map}")
+    self.target_index_map = target_index_map
 
     logger.info(f"Inputs chosen and their respective indices: {self.col_index_map}")
 
@@ -70,7 +71,7 @@ class DNN_Datamodule(L.LightningDataModule):
     self.input_scaler = data_scalers.create_column_transformer(self.inputs, self.col_index_map)
     self.target_scaler = data_scalers.create_column_transformer(self.target, target_index_map)
 
-    X, Y = data_help.create_timeseries_targets(data_arr, self.col_index_map['time_days'], self.col_index_map, list(self.target.keys()))
+    X, Y = data_help.create_timeseries_targets(self.data_arr, self.col_index_map['time_days'], self.col_index_map, list(self.target.keys()), self.delta_conc)
 
     # Split data 80/10/10 -- Train/validation/Test
     # ===== Time-series aware split =====

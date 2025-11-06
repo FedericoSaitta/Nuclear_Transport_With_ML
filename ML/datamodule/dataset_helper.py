@@ -6,7 +6,7 @@ import glob
 import os
 from loguru import logger
 import torch
-from torch.utils.data import DataLoader, TensorDataset
+from torch.utils.data import TensorDataset
 
 def check_duplicates(pandas_df):
   # Get all columns except 'run_label'
@@ -42,14 +42,24 @@ def add_burnup_to_df(pandas_df):
 
   # Compute cumulative sum in chunks of 100 rows
   chunk_size = 100
-  burnup_chunks = [
-      np.cumsum(energy_step[i:i + chunk_size])
-      for i in range(0, len(energy_step), chunk_size)
-  ]
+  burnup_chunks = [np.cumsum(energy_step[i:i + chunk_size]) for i in range(0, len(energy_step), chunk_size)]
   burnup_values = np.concatenate(burnup_chunks)
 
   pandas_df['burnup_MWd_per_kg'] = burnup_values
   return pandas_df
+
+
+def detect_run_length(pandas_df, time_col='time_days'):
+  time_values = pandas_df[time_col].values
+  
+  # Find where time resets (time[i] <= time[i-1])
+  for i in range(1, len(time_values)):
+    if time_values[i] <= time_values[i-1]:
+      # Found first reset, this is the run length
+      return i
+
+  # If no reset found, entire dataframe is one run
+  return len(pandas_df)
 
 
 def read_data(folder_path, fraction_of_data, drop_run_label=True):
@@ -73,13 +83,16 @@ def read_data(folder_path, fraction_of_data, drop_run_label=True):
   combined_df = pd.concat(dfs, ignore_index=True)
   check_duplicates(combined_df) # Checking if entire dataset has duplicates
 
+  run_length = detect_run_length(combined_df, time_col='time_days')
+  logger.info(f'Detected Run Lenght: {run_length}')
+
   if (fraction_of_data < 1.0):
-    total_runs = combined_df.shape[0] / 101 # Hard coding each run is 101 time steps long
+    total_runs = combined_df.shape[0] / run_length 
     runs_kept = int(fraction_of_data * total_runs) # Find the closest integer run number
-    combined_df = combined_df.iloc[0:runs_kept*101]
+    combined_df = combined_df.iloc[0:runs_kept*run_length]
     logger.info(f"Cutting Down Dataset to {fraction_of_data*100}%, runs present: {runs_kept}")
 
-  return combined_df
+  return combined_df, run_length
 
 
 def print_dataset_stats(df):
@@ -112,7 +125,7 @@ def split_df(df):
   return data_array, col_index_map
 
 
-def create_timeseries_targets(data, time_col_idx, element_dict, target_elements):
+def create_timeseries_targets(data, time_col_idx, element_dict, target_elements, delta_conc):
   
   if time_col_idx is None: raise ValueError("No time column found")
   for element in target_elements:
@@ -125,8 +138,8 @@ def create_timeseries_targets(data, time_col_idx, element_dict, target_elements)
   run_end_indices = []
   
   for i in range(1, len(time_values)):
-      if time_values[i] <= time_values[i-1]:
-          run_end_indices.append(i - 1)
+    if time_values[i] <= time_values[i-1]:
+      run_end_indices.append(i - 1)
   run_end_indices.append(len(data) - 1)  # Last row always ends a run
 
   # Create mask excluding run-ending rows
@@ -136,12 +149,17 @@ def create_timeseries_targets(data, time_col_idx, element_dict, target_elements)
   
   # Create X (all columns) and y (target columns at t+1)
   X = data[valid_indices]
-  y = data[valid_indices + 1][:, target_indices]
   
+  if delta_conc:
+    # Compute differences: y[t+1] - y[t] for the target columns
+    y = data[valid_indices + 1][:, target_indices] - data[valid_indices][:, target_indices]
+  else:
+    y = data[valid_indices + 1][:, target_indices]
+
+  logger.info(y)
   logger.info(f"Detected {len(run_end_indices)} runs")
   logger.info(f"Created {len(X)} training samples")
   logger.info(f"Input shape: {X.shape} | Target shape: {y.shape}")
-  logger.info(f"Targets: {target_elements}")
   
   return X, y
 

@@ -15,8 +15,6 @@ import lightning as L
 from torchmetrics.regression import MeanAbsoluteError, MeanSquaredError, R2Score
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
-import torchmetrics
-
 import sys
 from ML.utils import plot
 from ML.utils import metrics
@@ -166,8 +164,8 @@ class DNN_Model(L.LightningModule):
     preds_cpu = preds.cpu().numpy()
     
     # No shape manipulation needed - everything is already 2D from scale_datasets
-    labels = data_scaler.inverse_transform_column_transformer(target_scaler, y_cpu)
-    predictions = data_scaler.inverse_transform_column_transformer(target_scaler, preds_cpu)
+    labels = data_scaler.inverse_transformer(target_scaler, y_cpu)
+    predictions = data_scaler.inverse_transformer(target_scaler, preds_cpu)
 
     return {
       "labels": torch.from_numpy(labels),
@@ -256,7 +254,6 @@ class DNN_Model(L.LightningModule):
       logger.info(f"RMSE: {rmse_output:.6f}")
       logger.info(f"R²:   {r2_output:.6f}")
       
-
       plot.plot_predictions_vs_actuals(y_true_output, y_pred_output, mae_output, rmse_output, r2_output, output_dir)
       plot.plot_residuals_combined(y_true_output, y_pred_output, output_dir)
       
@@ -272,23 +269,23 @@ class DNN_Model(L.LightningModule):
     y_scaler = datamodule.target_scaler
     
     # Create target_col_indices dict
-    target_col_indices = {name: col_index_map[name] for name in target_names}
+    target_col_indices = datamodule.target_index_map
     
     # Get ground truth from Y_test
     if Y_test.ndim == 1: Y_test_2d = Y_test.reshape(-1, 1)
     else: Y_test_2d = Y_test
     
     # Inverse transform Y_test to get ground truth
-    Y_test_original = data_scaler.inverse_transform_column_transformer(y_scaler, Y_test_2d)
+    Y_test_original = data_scaler.inverse_transformer(y_scaler, Y_test_2d)
     
     # Teacher-Forcing: Use y_true_test (already computed from predictions above)
     tf_ground_truth = Y_test_original
     tf_predictions = y_pred_test  # Already in original scale from predict_step
     
     # Autoregressive: Model outputs predictions of t+2 from its own t+1 predictions
-    ar_predictions_dict, ar_ground_truth_dict = metrics.calculate_mare_autoregressive(
-      self.model, X_test, Y_test, target_col_indices, input_scaler, y_scaler, self.device, steps_per_run=100
-    )
+    delta_conc = datamodule.delta_conc
+    steps_per_run = 100
+    ar_predictions_dict, ar_ground_truth_dict = metrics.model_autoregress(self.model, X_test, Y_test, input_scaler, y_scaler, steps_per_run, col_index_map, target_col_indices)
     
     # Calculate MARE for each target
     for idx, target_name in enumerate(target_names):
@@ -354,33 +351,42 @@ class DNN_Model(L.LightningModule):
     logger.info("PREDICTION COMPARISON (Teacher-Forcing vs Autoregressive)")
     logger.info(f"{'='*20}")
 
-    # Get first run from X_test for ground truth
-    first_run_length = 100  # steps_per_run
-    first_run_X = X_test[:first_run_length]
-    
-    # Get ground truth for first run
-    first_run_original = data_scaler.inverse_transform_column_transformer(input_scaler, first_run_X)
+    # Use the FIRST RUN from the TEST SET, not from the original data
+    first_run_start = 0
+    first_run_end = steps_per_run  # This should match the steps_per_run from autoregress
 
     # Plot for each target
     for idx, target_name in enumerate(target_names):
-      logger.info(f"\nPlotting prediction comparison for: {target_name}")
-      
-      # Get ground truth for this target
-      ground_truth = first_run_original[:, col_index_map[target_name]]
-      
-      # Get teacher-forced predictions for first run (already computed)
-      teacher_forced_preds = tf_predictions[:first_run_length-1, idx] if tf_predictions.ndim > 1 else tf_predictions[:first_run_length-1]
-      
-      # Get autoregressive predictions for first run (already computed in ar_predictions_dict)
-      autoregressive_preds = ar_predictions_dict[target_name][:first_run_length-1]
-      
-      # Save to output-specific directory
-      output_dir = os.path.join(self.result_dir, target_name)
-      plot.plot_prediction_comparison(
-        ground_truth, teacher_forced_preds, autoregressive_preds, target_name, output_dir
-      )
-      
-      logger.info(f"  ✓ Comparison plot saved to: {output_dir}")
+        logger.info(f"\nPlotting prediction comparison for: {target_name}")
+        
+        # Get ground truth from the TEST SET (already unscaled in ar_ground_truth_dict)
+        ground_truth = ar_ground_truth_dict[target_name][first_run_start:first_run_end]
+        
+        logger.info(f'The ground truth has length {len(ground_truth)}')
+        
+        # Get teacher-forced predictions for first run from TEST SET
+        teacher_forced_preds = tf_predictions[first_run_start:first_run_end, idx] if tf_predictions.ndim > 1 else tf_predictions[first_run_start:first_run_end]
+        
+        # Apply delta_conc correction if needed
+        if delta_conc:
+            # Need to get the initial concentration and add cumulative deltas
+            # This is tricky - you might need to cumsum the predictions
+            logger.warning("delta_conc correction for teacher forcing may need review")
+            teacher_forced_preds = teacher_forced_preds + ground_truth[0]  # Simplified - may need cumsum
+        
+        # Get autoregressive predictions for first run
+        autoregressive_preds = ar_predictions_dict[target_name][first_run_start:first_run_end]
+        
+        # Verify all arrays have the same length
+        logger.info(f"  Ground truth length: {len(ground_truth)}")
+        logger.info(f"  Teacher-forced length: {len(teacher_forced_preds)}")
+        logger.info(f"  Autoregressive length: {len(autoregressive_preds)}")
+        
+        # Save to output-specific directory
+        output_dir = os.path.join(self.result_dir, target_name)
+        plot.plot_prediction_comparison(ground_truth, teacher_forced_preds, autoregressive_preds, target_name, output_dir)
+        
+        logger.info(f"  ✓ Comparison plot saved to: {output_dir}")
 
   def configure_optimizers(self):
     optimizer = torch.optim.AdamW(self.parameters(), lr=self.learning_rate, weight_decay=self.weight_decay)

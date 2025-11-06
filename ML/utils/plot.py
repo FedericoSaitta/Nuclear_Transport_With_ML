@@ -195,8 +195,8 @@ def plot_residuals_combined(actuals, predictions, plots_folder):
   plt.close()
   logger.info(f"Model prediction residuals saved to: {filepath}")
 
-def plot_feature_importance(importance_means, importance_stds, feature_names, 
-                          baseline_r2, plots_folder, metric_name, n_top=20):
+
+def plot_feature_importance(importance_means, importance_stds, feature_names, baseline, plots_folder, metric_name, n_top=20):
   n_features = len(importance_means)
   
   # Sort features by importance
@@ -206,32 +206,41 @@ def plot_feature_importance(importance_means, importance_stds, feature_names,
   n_top = min(n_top, n_features)
   top_indices = indices[:n_top]
   
-  plt.figure(figsize=(10, 8))
+  plt.figure(figsize=(12, 8))
   colors = plt.cm.viridis(np.linspace(0.3, 0.9, n_top))
-  plt.barh(range(n_top), importance_means[top_indices], 
-            xerr=importance_stds[top_indices], 
-            align='center', alpha=0.8, edgecolor='black',
-            color=colors)
+  bars = plt.barh(range(n_top), importance_means[top_indices], 
+                  xerr=importance_stds[top_indices], 
+                  align='center', alpha=0.8, edgecolor='black',
+                  color=colors)
+  
+  # Add exact values next to each bar
+  for i, (idx, bar) in enumerate(zip(top_indices, bars)):
+    value = importance_means[idx]
+    std = importance_stds[idx]
+    # Position text at the end of the bar
+    plt.text(value + std + 0.001, i, f'{value:.4f}±{std:.4f}', va='center', fontsize=11, fontweight='bold')
+  
+  # Extend x-axis by 10% to fit text
+  current_xlim = plt.xlim()
+  plt.xlim(current_xlim[0], current_xlim[1] * 1.2)
+  
   plt.yticks(range(n_top), [feature_names[i] for i in top_indices])
   plt.xlabel(f'Permutation Importance {metric_name}', fontsize=12)
   plt.ylabel('Features', fontsize=12)
-  plt.title(f'Top {n_top} Most Important Features\nBaseline{metric_name} = {baseline_r2:.4f}', 
-            fontsize=14)
+  plt.title(f'Top {n_top} Most Important Features\nBaseline {metric_name} = {baseline:.4f}', fontsize=14)
   plt.gca().invert_yaxis()
   plt.grid(True, alpha=0.3, axis='x')
   plt.tight_layout()
   filepath = os.path.join(plots_folder, f'{metric_name}_importance.png')
   plt.savefig(filepath, dpi=300)
   plt.close()
-  logger.info(f"{metric_name} Imporances plot saved to: {filepath}")
+  logger.info(f"{metric_name} Importances plot saved to: {filepath}")
 
-
-# In your plotting utility file (ML/utils/plot.py)
 
 def plot_prediction_comparison(ground_truth, teacher_forced_preds, autoregressive_preds, target_name, result_dir):
   # Calculate MARE for both prediction methods
-  mare_teacher = np.mean(np.abs(ground_truth[1:] - teacher_forced_preds) / np.max(ground_truth[1:]))
-  mare_autoregressive = np.mean(np.abs(ground_truth[1:] - autoregressive_preds) / np.max(ground_truth[1:]))
+  mare_teacher = np.mean(np.abs(ground_truth - teacher_forced_preds) / np.max(ground_truth))
+  mare_autoregressive = np.mean(np.abs(ground_truth - autoregressive_preds) / np.max(ground_truth))
   
   # Create figure with two rows: main plot and residuals
   fig = plt.figure(figsize=(16, 9))
@@ -241,24 +250,24 @@ def plot_prediction_comparison(ground_truth, teacher_forced_preds, autoregressiv
   
   # Main predictions plot
   ax1 = fig.add_subplot(gs[0])
-  time_steps = np.arange(len(ground_truth))
+  time_steps = np.arange(len(ground_truth)) + 1 # Shift them by one to the right as t=0 isnt predicted
   
   # Plot ground truth as solid line
   ax1.plot(time_steps, ground_truth, 'k-', label='Ground Truth', 
            linewidth=2.5, alpha=0.9, zorder=1)
   
   # Teacher-forced with square markers
-  ax1.plot(time_steps[1:], teacher_forced_preds, 'b-', 
+  ax1.plot(time_steps, teacher_forced_preds, 'b-', 
            linewidth=2, alpha=0.8, zorder=2)
-  ax1.plot(time_steps[1:], teacher_forced_preds, 
+  ax1.plot(time_steps, teacher_forced_preds, 
            's', color='blue', markersize=5, markerfacecolor='blue', 
            markeredgecolor='white', markeredgewidth=0.5,
            label=f'Teacher-Forced (MARE: {mare_teacher:.4f})', zorder=3)
   
   # Autoregressive with triangle markers
-  ax1.plot(time_steps[1:], autoregressive_preds, 'r-', 
+  ax1.plot(time_steps, autoregressive_preds, 'r-', 
            linewidth=2, alpha=0.8, zorder=2)
-  ax1.plot(time_steps[1:], autoregressive_preds, 
+  ax1.plot(time_steps, autoregressive_preds, 
            '^', color='red', markersize=5, markerfacecolor='red', 
            markeredgecolor='white', markeredgewidth=0.5,
            label=f'Autoregressive (MARE: {mare_autoregressive:.4f})', zorder=3)
@@ -271,18 +280,18 @@ def plot_prediction_comparison(ground_truth, teacher_forced_preds, autoregressiv
   
   # Residuals plot (both methods)
   ax2 = fig.add_subplot(gs[1], sharex=ax1)
-  residuals_teacher = ground_truth[1:] - teacher_forced_preds
-  residuals_autoregressive = ground_truth[1:] - autoregressive_preds
-  
+  residuals_teacher = ground_truth - teacher_forced_preds
+  residuals_autoregressive = ground_truth - autoregressive_preds
+
   # Plot residuals with thicker lines and markers
-  ax2.plot(time_steps[1:], residuals_teacher, 'b-', linewidth=1.8, alpha=0.8, zorder=2)
-  ax2.plot(time_steps[1:], residuals_teacher, 
+  ax2.plot(time_steps, residuals_teacher, 'b-', linewidth=1.8, alpha=0.8, zorder=2)
+  ax2.plot(time_steps, residuals_teacher, 
            's', color='blue', markersize=5, markerfacecolor='blue', 
            markeredgecolor='white', markeredgewidth=0.5, 
            label='Teacher-Forced', zorder=3)
   
-  ax2.plot(time_steps[1:], residuals_autoregressive, 'r-', linewidth=1.8, alpha=0.8, zorder=2)
-  ax2.plot(time_steps[1:], residuals_autoregressive, 
+  ax2.plot(time_steps, residuals_autoregressive, 'r-', linewidth=1.8, alpha=0.8, zorder=2)
+  ax2.plot(time_steps, residuals_autoregressive, 
            '^', color='red', markersize=6, markerfacecolor='red', 
            markeredgecolor='white', markeredgewidth=0.5,
            label='Autoregressive', zorder=3)
