@@ -7,6 +7,8 @@ import os
 from loguru import logger
 import torch
 from torch.utils.data import TensorDataset
+import h5py
+
 
 def check_duplicates(pandas_df):
   # Get all columns except 'run_label'
@@ -47,11 +49,52 @@ def detect_run_length(pandas_df, time_col='time_days'):
   # If no reset found, entire dataframe is one run
   return len(pandas_df)
 
+def read_h5_file(file_path):
+  with h5py.File(file_path, "r") as f:
+      # Get all column names in original order
+      all_columns = [col for col in f["all_columns"][:]]
+      
+      # Initialize dictionary to store data
+      data_dict = {}
+      
+      # Read numeric data
+      if "numeric_data" in f:
+          numeric_data = f["numeric_data"][:]
+          numeric_columns = [col for col in f["numeric_columns"][:]]
+          
+          # Add each numeric column to the dictionary
+          for i, col in enumerate(numeric_columns):
+              data_dict[col] = numeric_data[:, i]
+      
+      # Read string data (if any)
+      if "string_columns" in f:
+          string_columns = [col for col in f["string_columns"][:]]
+          
+          for col in string_columns:
+              string_data = f[f"string_{col}"][:]
+              # Decode if necessary
+              if string_data.dtype.kind == 'S' or string_data.dtype.kind == 'O':
+                  string_data = [s.decode('utf-8') if isinstance(s, bytes) else str(s) for s in string_data]
+              data_dict[col] = string_data
+      
+      # Create DataFrame with columns in original order
+      df = pl.DataFrame(data_dict)
+      
+      # Reorder columns to match original order
+      df = df.select(all_columns)
+  
+  return df
+
 
 def read_data(file_path, fraction_of_data, drop_run_label=True):
   logger.info(f'Reading data from: {file_path}')
   
-  df = pd.read_csv(file_path)
+  if '.csv' in file_path:
+    df = pd.read_csv(file_path)
+  elif '.h5' in file_path:
+    df = read_h5_file(file_path)
+
+
   df = remove_empty_columns(df)
   
   # Drop the 'run_label' column if it exists

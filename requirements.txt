@@ -8,3 +8,4 @@ pytorch-lightning
 omegaconf
 loguru
 tdqm
+polars
