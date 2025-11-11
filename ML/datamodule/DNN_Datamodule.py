@@ -1,15 +1,7 @@
-# === Core Libraries === #
-import numpy as np
-import torch
-from torch.utils.data import DataLoader, TensorDataset
-from sklearn.model_selection import train_test_split
-from omegaconf import DictConfig
 from loguru import logger
 import lightning as L
-from sklearn.preprocessing import StandardScaler, MinMaxScaler
+from torch.utils.data import DataLoader
 import os
-import re
-from sklearn.base import clone
 
 import ML.datamodule.dataset_helper as data_help
 import ML.utils.plot as plot
@@ -17,39 +9,28 @@ import ML.datamodule.data_scalers as data_scalers
 
 
 class DNN_Datamodule(L.LightningDataModule):
-  def __init__(self, cfg_object: DictConfig):
+  def __init__(self, cfg_object):
     super().__init__()
 
-    # === Dataset & model configuration === #
-    dataset_cfg, model_cfg, train_cfg = cfg_object.dataset, cfg_object.model, cfg_object.train
-
-    self.path_to_data = dataset_cfg.path_to_data
-    self.fraction_of_data = dataset_cfg.fraction_of_data
-    self.train_batch_size = dataset_cfg.train.batch_size
-    self.val_batch_size = dataset_cfg.val.batch_size
+    self.path_to_data = cfg_object.dataset.path_to_data
+    self.fraction_of_data = cfg_object.dataset.fraction_of_data
+    self.train_batch_size = cfg_object.dataset.train.batch_size
+    self.val_batch_size = cfg_object.dataset.val.batch_size
     self.num_workers = cfg_object.runtime.num_workers
     
     # Get the inputs and target dictionaries that include their respective scaling
-    self.inputs = data_scalers.create_scaler_dict(dataset_cfg['inputs'])
-    self.target = data_scalers.create_scaler_dict(dataset_cfg['targets'])
-    self.delta_conc = dataset_cfg.target_delta_conc
-
-    # Check that target is present in inputs
-    target_keys = set(self.target.keys())
-    input_keys = set(self.inputs.keys())
-
-    if not target_keys.issubset(input_keys):
-      missing = target_keys - input_keys
-      raise ValueError(f"Target features not found in inputs: {missing}")
+    self.inputs = data_scalers.create_scaler_dict(cfg_object.dataset['inputs'])
+    self.target = data_scalers.create_scaler_dict(cfg_object.dataset['targets'])
+    self.delta_conc = cfg_object.dataset.target_delta_conc
 
     # === Result output directory === #
-    self.result_dir = f'results/{model_cfg.name}/'
+    self.result_dir = f'results/{cfg_object.model.name}/'
     os.makedirs(self.result_dir, exist_ok=True)
 
     # Private variable to ensure set up is not done twice when calling training and test scripts back to back
     self._has_setup = False
   
-  def setup(self, stage: str):
+  def setup(self, stage):
     if self._has_setup: return
     self._has_setup = True
 
@@ -58,29 +39,30 @@ class DNN_Datamodule(L.LightningDataModule):
     data_df, self.run_length = data_help.read_data(self.path_to_data, self.fraction_of_data, drop_run_label=True)
     data_help.print_dataset_stats(data_df)
 
-    data_df = data_help.filter_columns(data_df, list(self.inputs.keys()))
-    self.data_arr, self.col_index_map = data_help.split_df(data_df)
-    
-    target_index_map = {name: idx for idx, name in enumerate(self.target.keys())}
-    logger.info(f"Target index map: {target_index_map}")
-    self.target_index_map = target_index_map
+    # Preserve order: inputs first, then targets (no duplicates)
+    all_columns = list(self.inputs.keys()) + [k for k in self.target.keys() if k not in self.inputs.keys()]
 
-    logger.info(f"Inputs chosen and their respective indices: {self.col_index_map}")
+    # Get the columns we are interested in this analysis
+    data_df = data_help.filter_columns(data_df, all_columns)
+
+    # Get the array and dictionary for inputs and output
+    self.input_data_arr, self.col_index_map = data_help.split_df(data_df, self.inputs.keys())
+    self.target_data_arr, self.target_index_map = data_help.split_df(data_df, self.target.keys())
 
     # Create Column Transformers for inputs and get the scaler for the targets
     self.input_scaler = data_scalers.create_column_transformer(self.inputs, self.col_index_map)
-    self.target_scaler = data_scalers.create_column_transformer(self.target, target_index_map)
+    self.target_scaler = data_scalers.create_column_transformer(self.target, self.target_index_map)
 
-    X, Y = data_help.create_timeseries_targets(self.data_arr, self.col_index_map['time_days'], self.col_index_map, list(self.target.keys()), self.delta_conc)
+    X, Y = data_help.create_timeseries_targets(self.input_data_arr, self.target_data_arr, self.col_index_map['time_days'], 
+                                               self.col_index_map, self.target_index_map, self.delta_conc)
 
-    # Split data 80/10/10 -- Train/validation/Test
-    # ===== Time-series aware split =====
+    # Split data 80/10/10 -- Train/validation/Test, this is Time aware
     X_train, X_val, X_test, y_train, y_val, y_test = data_help.timeseries_train_val_test_split(
       X, Y, train_frac=0.8, val_frac=0.1, test_frac=0.1, steps_per_run=100, shuffle_within_train=True
     )
     
     plot.plot_data_distributions(X_train, self.col_index_map, save_dir=self.result_dir, name='Raw_Inputs')
-    plot.plot_data_distributions(y_train, target_index_map, save_dir=self.result_dir, name='Raw_Targets')
+    plot.plot_data_distributions(y_train, self.target_index_map, save_dir=self.result_dir, name='Raw_Targets')
     
     # Scale all datasets
     X_train, X_val, X_test, y_train, y_val, y_test = data_help.scale_datasets(
@@ -88,7 +70,7 @@ class DNN_Datamodule(L.LightningDataModule):
     )
 
     plot.plot_data_distributions(X_train, self.col_index_map, save_dir=self.result_dir, name='Scaled_Inputs')
-    plot.plot_data_distributions(y_train, target_index_map, save_dir=self.result_dir, name='Scaled_Targets')
+    plot.plot_data_distributions(y_train, self.target_index_map, save_dir=self.result_dir, name='Scaled_Targets')
     
     # Create tensor datasets and log their sizes
     self.train_dataset, self.val_dataset, self.test_dataset = data_help.create_tensor_datasets(X_train, X_val, X_test, y_train, y_val, y_test)
@@ -100,10 +82,10 @@ class DNN_Datamodule(L.LightningDataModule):
     return DataLoader(self.train_dataset, batch_size=self.train_batch_size, shuffle=True, num_workers=self.num_workers, persistent_workers=True, drop_last=False, pin_memory=False)
 
   def val_dataloader(self):
-    return DataLoader(self.val_dataset, batch_size=self.val_batch_size, shuffle=False, num_workers=self.num_workers, persistent_workers=True, drop_last=False)
+    return DataLoader(self.val_dataset, batch_size=self.val_batch_size, shuffle=False, num_workers=self.num_workers, persistent_workers=True)
 
   def test_dataloader(self):
-    return DataLoader(self.test_dataset, batch_size=self.train_batch_size, shuffle=False, num_workers=self.num_workers, persistent_workers=True)
+    return DataLoader(self.test_dataset, batch_size=self.val_batch_size, shuffle=False, num_workers=self.num_workers, persistent_workers=True)
 
   def predict_dataloader(self):
-    return DataLoader(self.test_dataset, batch_size=self.train_batch_size, shuffle=False, num_workers=self.num_workers, persistent_workers=True)
+    return DataLoader(self.test_dataset, batch_size=self.val_batch_size, shuffle=False, num_workers=self.num_workers, persistent_workers=True)

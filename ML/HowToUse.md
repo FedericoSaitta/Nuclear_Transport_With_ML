@@ -108,15 +108,6 @@ The training and testing of the model is controlled by a .yaml file which the us
 
 ---
 
-## Output Configuration
-
-### `output`
-- **`result_dir`**: `string`
-  - Directory path for saving results, checkpoints, and logs
-  - Supports variable interpolation: `${model.name}` inserts the model name
-
----
-
 ## Runtime Configuration
 
 ### `runtime`

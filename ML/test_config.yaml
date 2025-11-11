@@ -1,5 +1,5 @@
 dataset:
-  path_to_data: "generated_data"
+  path_to_data: "generated_data/data.csv"
   fraction_of_data: 1.0        # 1.0 means use the full dataset
 
   inputs:
@@ -10,8 +10,8 @@ dataset:
     mod_temp_K: "MinMax"
     mod_density_g_cm3: "MinMax"
     boron_ppm: "MinMax"
-    burnup_MWd_per_kg: "robust"
     U235: "robust"
+    U233: "robust"
     U238: "robust"
     Pu239: "robust"
     Pu240: "robust"
@@ -20,12 +20,13 @@ dataset:
   # Target features with scaling
   targets:
     U235: "robust"
+    U233: "robust"
     U238: "robust"
     Pu239: "robust"
     Pu240: "robust"
     Pu241: "robust"
 
-  target_delta_conc: False # Uses concentration differences instead of absolute values as targets
+  target_delta_conc: True # Uses concentration differences instead of absolute values as targets
 
   # Data loader configuration
   train:
@@ -34,25 +35,22 @@ dataset:
     batch_size: 8192 # As large as possible to speed up
 
 model:
-  name: "testing_code"
+  name: "delta_conc_chain_test"
   layers: [64, 64]         
   dropout_probability: 0.1
   activation: "gelu"  # Options: relu, tanh, sigmoid, leaky_relu, elu, gelu
   output_activation: "none"  # Options: none, sigmoid, tanh, softplus
-  residual_connections: False
+  residual_connections: True
 
 train:
   loss: "mse"
   learning_rate: 5.0e-5
   weight_decay: 5.0e-4
   lr_scheduler_patience: 10
-  num_epochs: 2000
+  num_epochs: 500
   early_stopping_patience: 20
 
   dropout_probability: 0.1   
-
-output:
-  result_dir: "results/${model.name}/"
 
 runtime:
   mode: "train"    # Options: train, train_from_ckp

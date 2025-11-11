@@ -34,20 +34,6 @@ def remove_empty_columns(pandas_df):
   
   return pandas_df
 
-def add_burnup_to_df(pandas_df):
-  power_MW_per_kg = pandas_df['power_W_g'] * 1e-3  # Convert power from W/g to MW/kg
-  dt_days = 10  # time step (constant)
-
-  energy_step = power_MW_per_kg * dt_days
-
-  # Compute cumulative sum in chunks of 100 rows
-  chunk_size = 100
-  burnup_chunks = [np.cumsum(energy_step[i:i + chunk_size]) for i in range(0, len(energy_step), chunk_size)]
-  burnup_values = np.concatenate(burnup_chunks)
-
-  pandas_df['burnup_MWd_per_kg'] = burnup_values
-  return pandas_df
-
 
 def detect_run_length(pandas_df, time_col='time_days'):
   time_values = pandas_df[time_col].values
@@ -62,38 +48,28 @@ def detect_run_length(pandas_df, time_col='time_days'):
   return len(pandas_df)
 
 
-def read_data(folder_path, fraction_of_data, drop_run_label=True):
-  # Get all CSV files in the folder
-  csv_files = glob.glob(os.path.join(folder_path, "*.csv"))
+def read_data(file_path, fraction_of_data, drop_run_label=True):
+  logger.info(f'Reading data from: {file_path}')
   
-  # Read each CSV into a list of DataFrames
-  dfs = []
-  for file in csv_files:
-    logger.info(f'Reading data from: {file}')
-    df = pd.read_csv(file)
-    df = remove_empty_columns(df)
-    df = add_burnup_to_df(df)
-    
-    # Drop the 'run_label' column if it exists
-    if drop_run_label and 'run_label' in df.columns:
-      df = df.drop(columns=['run_label'])
-    
-    dfs.append(df)
+  df = pd.read_csv(file_path)
+  df = remove_empty_columns(df)
   
-  combined_df = pd.concat(dfs, ignore_index=True)
-  check_duplicates(combined_df) # Checking if entire dataset has duplicates
+  # Drop the 'run_label' column if it exists
+  if drop_run_label and 'run_label' in df.columns:
+    df = df.drop(columns=['run_label'])
+  
+  check_duplicates(df)  # Checking if entire dataset has duplicates
 
-  run_length = detect_run_length(combined_df, time_col='time_days')
-  logger.info(f'Detected Run Lenght: {run_length}')
+  run_length = detect_run_length(df, time_col='time_days')
+  logger.info(f'Detected Run Length: {run_length}')
 
-  if (fraction_of_data < 1.0):
-    total_runs = combined_df.shape[0] / run_length 
-    runs_kept = int(fraction_of_data * total_runs) # Find the closest integer run number
-    combined_df = combined_df.iloc[0:runs_kept*run_length]
+  if fraction_of_data < 1.0:
+    total_runs = df.shape[0] / run_length 
+    runs_kept = int(fraction_of_data * total_runs)  # Find the closest integer run number
+    df = df.iloc[0:runs_kept*run_length]
     logger.info(f"Cutting Down Dataset to {fraction_of_data*100}%, runs present: {runs_kept}")
 
-  return combined_df, run_length
-
+  return df, run_length
 
 def print_dataset_stats(df):
   logger.info("=== Dataset Statistics ===")
@@ -119,44 +95,49 @@ def filter_columns(df, input_features):
   return df[input_features].copy() 
 
 
-def split_df(df):
-  data_array = df.to_numpy()
-  col_index_map = {col: idx for idx, col in enumerate(df.columns)}
+def split_df(df, input_keys):
+  # Filter to only requested columns
+  filtered_df = df[[col for col in df.columns if col in input_keys]]
+  data_array = filtered_df.to_numpy()
+  col_index_map = {col: idx for idx, col in enumerate(filtered_df.columns)}
   return data_array, col_index_map
 
 
-def create_timeseries_targets(data, time_col_idx, element_dict, target_elements, delta_conc):
+def create_timeseries_targets(input_data, target_data, time_col_idx, input_col_map, target_elements, delta_conc):
+  if time_col_idx is None: 
+    raise ValueError("No time column found")
   
-  if time_col_idx is None: raise ValueError("No time column found")
+  # Validate target elements exist
   for element in target_elements:
-    if element not in element_dict: raise ValueError(f"Target element '{element}' not found in element_dict")
+    if element not in input_col_map: 
+      logger.warning(f"Your Target feature: {element} was not found in the inputs")
   
-  target_indices = [element_dict[element] for element in target_elements]
+  logger.info(input_col_map)
   
-  # Find run boundaries (where time resets)
-  time_values = data[:, time_col_idx]
+  # Find run boundaries (where time resets) using input_data
+  time_values = input_data[:, time_col_idx]
   run_end_indices = []
   
   for i in range(1, len(time_values)):
     if time_values[i] <= time_values[i-1]:
       run_end_indices.append(i - 1)
-  run_end_indices.append(len(data) - 1)  # Last row always ends a run
+  run_end_indices.append(len(input_data) - 1)  # Last row always ends a run
 
   # Create mask excluding run-ending rows
-  valid_mask = np.ones(len(data), dtype=bool)
+  valid_mask = np.ones(len(input_data), dtype=bool)
   valid_mask[run_end_indices] = False
   valid_indices = np.where(valid_mask)[0]
   
-  # Create X (all columns) and y (target columns at t+1)
-  X = data[valid_indices]
+  # X: inputs at time t
+  X = input_data[valid_indices]
   
+  # y: targets at time t+1
   if delta_conc:
     # Compute differences: y[t+1] - y[t] for the target columns
-    y = data[valid_indices + 1][:, target_indices] - data[valid_indices][:, target_indices]
+    y = target_data[valid_indices + 1] - target_data[valid_indices]
   else:
-    y = data[valid_indices + 1][:, target_indices]
+    y = target_data[valid_indices + 1]
 
-  logger.info(y)
   logger.info(f"Detected {len(run_end_indices)} runs")
   logger.info(f"Created {len(X)} training samples")
   logger.info(f"Input shape: {X.shape} | Target shape: {y.shape}")
@@ -164,8 +145,7 @@ def create_timeseries_targets(data, time_col_idx, element_dict, target_elements,
   return X, y
 
 
-def timeseries_train_val_test_split(X, Y, train_frac=0.8, val_frac=0.1, test_frac=0.1, 
-                                     steps_per_run=100, shuffle_within_train=True):
+def timeseries_train_val_test_split(X, Y, train_frac=0.8, val_frac=0.1, test_frac=0.1, steps_per_run=100, shuffle_within_train=True):
     # Validate fractions
     if not np.isclose(train_frac + val_frac + test_frac, 1.0):
         raise ValueError(f"Fractions must sum to 1.0, got {train_frac + val_frac + test_frac}")
@@ -239,22 +219,16 @@ def scale_datasets(X_train, X_val, X_test, y_train, y_val, y_test, input_scaler,
   X_val = input_scaler.transform(X_val)
   X_test = input_scaler.transform(X_test)
   
-  # Scale targets - handle both single and multiple outputs
-  # Ensure targets are 2D for sklearn scalers
-  if y_train.ndim == 1:
-    y_train = y_train.reshape(-1, 1)
-  if y_val.ndim == 1:
-    y_val = y_val.reshape(-1, 1)
-  if y_test.ndim == 1:
-    y_test = y_test.reshape(-1, 1)
+  # Scale targets - handle both single and multiple outputs by ensuring they are 2D
+  if y_train.ndim == 1: y_train = y_train.reshape(-1, 1)
+  if y_val.ndim == 1: y_val = y_val.reshape(-1, 1)
+  if y_test.ndim == 1: y_test = y_test.reshape(-1, 1)
   
   # Fit and transform targets
   y_train = target_scaler.fit_transform(y_train)
   y_val = target_scaler.transform(y_val)
   y_test = target_scaler.transform(y_test)
   
-  # REMOVED: The flattening logic that was causing inconsistency
-  # Keep everything 2D for consistency
   return X_train, X_val, X_test, y_train, y_val, y_test
 
 def create_tensor_datasets(X_train, X_val, X_test, y_train, y_val, y_test):
