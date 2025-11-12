@@ -62,7 +62,7 @@ class DNN_Model(L.LightningModule):
     y_hat = self.model(x)
  
     loss = self.loss_fn(y_hat, y)
-    self.log('train_loss', loss, on_step=False, on_epoch=True, prog_bar=True)
+    self.log('train_loss', loss, on_step=False, on_epoch=True, prog_bar=True) # doesnt get logged in sql databse on purpose
     return loss
 
   # Gets called for each train epoch
@@ -73,6 +73,7 @@ class DNN_Model(L.LightningModule):
   # Gets called when training ends
   def on_train_end(self):
     plot.plot_losses(self.train_losses, self.val_losses, self.result_dir)
+
     
   # Gets called called for each validation batch
   def validation_step(self, batch, batch_idx):
@@ -80,10 +81,9 @@ class DNN_Model(L.LightningModule):
     y_hat = self.model(x)
     
     loss = self.loss_fn(y_hat, y)
-    self.log('val_loss', loss, on_epoch=True, prog_bar=True)
+    self.log('val_loss', loss, on_step=False, on_epoch=True, prog_bar=True) # doesnt get logged in sql databse on purpose
     return loss
 
-  # Gets called for each validation epoch
   def on_validation_epoch_end(self):
     epoch_loss = self.trainer.callback_metrics["val_loss"].item()
     self.val_losses.append(epoch_loss)
@@ -116,7 +116,8 @@ class DNN_Model(L.LightningModule):
     res = self.predict_step(batch, batch_idx)
     self.test_predictions.append(res["predictions"].cpu().numpy())
     self.test_labels.append(res["labels"].cpu().numpy())
-  
+
+
   def on_test_epoch_end(self):
     datamodule = self.trainer.datamodule
     
@@ -134,17 +135,26 @@ class DNN_Model(L.LightningModule):
     )
     
     # 2. Process each output
+    per_target_metrics = []
     for idx, target_name in enumerate(target_names):
       self._process_single_output(
         idx, target_name,
         y_true_test[:, idx], y_pred_test[:, idx],
         mae_arr[idx], rmse_arr[idx], r2_arr[idx]
       )
+      
+      per_target_metrics.append({
+        'name': target_name,
+        'mae': float(mae_arr[idx]),
+        'rmse': float(rmse_arr[idx]),
+        'r2': float(r2_arr[idx])
+      })
     
     # 3. MARE comparison
     ar_preds_dict, ar_truth_dict, steps_per_run = self._compute_mare_comparison(
       test_data['inputs'], test_data['targets_scaled'],
-      y_true_test, y_pred_test, target_names, datamodule
+      y_true_test, y_pred_test, target_names, datamodule,
+      per_target_metrics  # Pass to add MARE values
     )
     
     # 4. Feature importance
@@ -156,9 +166,24 @@ class DNN_Model(L.LightningModule):
     self._plot_prediction_comparisons(
         y_pred_test, ar_preds_dict, ar_truth_dict, 
         target_names, steps_per_run, datamodule.delta_conc,
-        test_data['inputs'], datamodule  # Pass these additional parameters
+        test_data['inputs'], datamodule
     )
-
+    
+    # 6. Log everything to database as a SINGLE ROW
+    if hasattr(self.trainer, 'logger') and hasattr(self.trainer.logger, 'update_final_results'):
+        test_metrics = {
+            'mae_avg': float(mae_arr.mean()),
+            'rmse_avg': float(rmse_arr.mean()),
+            'r2_avg': float(r2_arr.mean()),
+            'per_target': per_target_metrics
+        }
+        
+        self.trainer.logger.update_final_results(
+            train_losses=self.train_losses,
+            val_losses=self.val_losses,
+            test_metrics=test_metrics
+        )
+        
   def configure_optimizers(self):
     optimizer = torch.optim.AdamW(self.parameters(), lr=self.learning_rate, weight_decay=self.weight_decay)
     scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=self.lr_scheduler_patience)
@@ -217,7 +242,7 @@ class DNN_Model(L.LightningModule):
     
     return output_dir
   
-  def _compute_mare_comparison(self, X_test, Y_test, y_true_test, y_pred_test, target_names, datamodule):
+  def _compute_mare_comparison(self, X_test, Y_test, y_true_test, y_pred_test, target_names, datamodule, per_target_metrics=None):
     """Compare MARE between teacher-forcing and autoregressive modes."""
     logger.info(f"\n{'='*20}")
     logger.info("MARE: Teacher-Forcing vs Autoregressive")
@@ -333,6 +358,11 @@ class DNN_Model(L.LightningModule):
         
         self.log(f'{target_name}/MARE_TeacherForcing', float(mare_tf))
         self.log(f'{target_name}/MARE_Autoregressive', float(mare_ar))
+        
+        # ADD MARE VALUES TO per_target_metrics FOR DATABASE LOGGING
+        if per_target_metrics is not None:
+            per_target_metrics[idx]['mare_tf'] = float(mare_tf)
+            per_target_metrics[idx]['mare_ar'] = float(mare_ar)
     
     return ar_predictions_dict, ar_ground_truth_dict, steps_per_run
 

@@ -9,3 +9,5 @@ omegaconf
 loguru
 tdqm
 polars
+h5py
+sqlite3

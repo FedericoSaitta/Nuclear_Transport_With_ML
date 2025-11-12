@@ -1,65 +1,291 @@
 import sqlite3
+from datetime import datetime
 from pytorch_lightning.loggers import Logger
 from pytorch_lightning.utilities import rank_zero_only
+from loguru import logger as log
+import json
 
 class SQLiteLogger(Logger):
-    def __init__(self, db_path='metrics.db', name='experiment'):
-        super().__init__()
-        self.db_path = db_path
-        self._name = name
-        self._version = 0
-        self._init_db()
+  def __init__(self, db_path='results/experiments.db', name='experiment', config=None):
+    super().__init__()
+    self.db_path = db_path
+    self._name = name
+    self._experiment_id = None
+    self._config = config
+    self._start_time = datetime.now()
+    self._init_db()
+    self._create_experiment()
+  
+  def _init_db(self):
+    """Initialize the SQLite database with a single experiments table"""
+    import os
+    db_dir = os.path.dirname(self.db_path)
+    if db_dir:  # Only create if there's actually a directory path
+        os.makedirs(db_dir, exist_ok=True)
     
-    def _init_db(self):
-        """Initialize the SQLite database and create table if it doesn't exist"""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS metrics (
-                experiment_name TEXT,
-                version INTEGER,
-                step INTEGER,
-                epoch INTEGER,
-                metric_name TEXT,
-                metric_value REAL,
-                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-        conn.commit()
-        conn.close()
+    conn = sqlite3.connect(self.db_path)
+    cursor = conn.cursor()
     
-    @property
-    def name(self):
-        return self._name
+    # Single table with all info
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS experiments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            timestamp TEXT NOT NULL,
+            status TEXT DEFAULT 'running',
+            
+            -- Model architecture
+            model_name TEXT,
+            layers TEXT,
+            activation TEXT,
+            output_activation TEXT,
+            residual_connections BOOLEAN,
+            dropout_prob REAL,
+            n_inputs INTEGER,
+            n_outputs INTEGER,
+            
+            -- Input/Output features
+            input_features TEXT,
+            target_features TEXT,
+            
+            -- Training config
+            learning_rate REAL,
+            weight_decay REAL,
+            batch_size INTEGER,
+            epochs INTEGER,
+            loss_function TEXT,
+            lr_scheduler_patience INTEGER,
+            
+            -- Dataset config
+            dataset_path TEXT,
+            fraction_of_data REAL,
+            delta_conc BOOLEAN,
+            
+            -- Final training metrics
+            final_train_loss REAL,
+            final_val_loss REAL,
+            min_train_loss REAL,
+            min_val_loss REAL,
+            
+            -- Overall test metrics
+            mae_avg REAL,
+            rmse_avg REAL,
+            r2_avg REAL,
+            
+            -- Per-target metrics (stored as JSON)
+            target_metrics TEXT,
+            
+            -- Metadata
+            duration_seconds REAL,
+            completed_at TEXT
+        )
+    ''')
     
-    @property
-    def version(self):
-        return self._version
+    conn.commit()
+    conn.close()
+    log.info(f"✓ Database initialized at: {self.db_path}")
+  
+  def _create_experiment(self):
+    """Create a new experiment entry with hyperparameters"""
+    conn = sqlite3.connect(self.db_path)
+    cursor = conn.cursor()
     
-    @rank_zero_only
-    def log_metrics(self, metrics, step=None):
-        """Log metrics to SQLite database"""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        for metric_name, metric_value in metrics.items():
+    if self._config:
+        try:
+            # Model config
+            model_name = getattr(self._config.model, 'name', None)
+            layers = str(list(self._config.model.layers)) if hasattr(self._config.model, 'layers') else None
+            activation = getattr(self._config.model, 'activation', None)
+            output_activation = getattr(self._config.model, 'output_activation', None)
+            residual_connections = getattr(self._config.model, 'residual_connections', None)
+            dropout_prob = getattr(self._config.model, 'dropout_probability', None)
+            
+            # Input/Output features - handle as dict
+            if hasattr(self._config.dataset, 'inputs'):
+                inputs = self._config.dataset.inputs
+                if isinstance(inputs, dict):
+                    input_features = json.dumps(list(inputs.keys()))
+                    n_inputs = len(inputs)
+                else:
+                    input_features = json.dumps(list(inputs))
+                    n_inputs = len(inputs)
+            else:
+                input_features = None
+                n_inputs = None
+            
+            if hasattr(self._config.dataset, 'targets'):
+                targets = self._config.dataset.targets
+                if isinstance(targets, dict):
+                    target_features = json.dumps(list(targets.keys()))
+                    n_outputs = len(targets)
+                else:
+                    target_features = json.dumps(list(targets))
+                    n_outputs = len(targets)
+            else:
+                target_features = None
+                n_outputs = None
+            
+            # Training config
+            learning_rate = getattr(self._config.train, 'learning_rate', None)
+            weight_decay = getattr(self._config.train, 'weight_decay', None)
+            
+            # Batch size is nested under dataset.train.batch_size
+            if hasattr(self._config.dataset, 'train') and hasattr(self._config.dataset.train, 'batch_size'):
+                batch_size = self._config.dataset.train.batch_size
+            else:
+                batch_size = None
+            
+            # It's num_epochs, not epochs
+            epochs = getattr(self._config.train, 'num_epochs', None)
+            loss_function = getattr(self._config.train, 'loss', None)
+            lr_scheduler_patience = getattr(self._config.train, 'lr_scheduler_patience', None)
+            
+            # Dataset config
+            dataset_path = getattr(self._config.dataset, 'path_to_data', None)
+            fraction_of_data = getattr(self._config.dataset, 'fraction_of_data', 1.0)
+            delta_conc = getattr(self._config.dataset, 'target_delta_conc', False)
+            
             cursor.execute('''
-                INSERT INTO metrics (experiment_name, version, step, epoch, metric_name, metric_value)
-                VALUES (?, ?, ?, ?, ?, ?)
-            ''', (self.name, self.version, step, metrics.get('epoch', None), metric_name, float(metric_value)))
-        
-        conn.commit()
-        conn.close()
+                INSERT INTO experiments (
+                    name, timestamp, model_name, layers, activation, output_activation,
+                    residual_connections, dropout_prob, n_inputs, n_outputs,
+                    input_features, target_features,
+                    learning_rate, weight_decay, batch_size, epochs, loss_function,
+                    lr_scheduler_patience, dataset_path, fraction_of_data, delta_conc
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                self._name,
+                self._start_time.isoformat(),
+                model_name,
+                layers,
+                activation,
+                output_activation,
+                residual_connections,
+                dropout_prob,
+                n_inputs,
+                n_outputs,
+                input_features,
+                target_features,
+                learning_rate,
+                weight_decay,
+                batch_size,
+                epochs,
+                loss_function,
+                lr_scheduler_patience,
+                dataset_path,
+                fraction_of_data,
+                delta_conc
+            ))
+            
+            log.info(f"✓ Logged hyperparameters: lr={learning_rate}, batch_size={batch_size}, epochs={epochs}")
+            
+        except Exception as e:
+            log.error(f"Error extracting config values: {e}")
+            import traceback
+            traceback.print_exc()
+            # Fall back to minimal insert
+            cursor.execute('''
+                INSERT INTO experiments (name, timestamp) VALUES (?, ?)
+            ''', (self._name, self._start_time.isoformat()))
+    else:
+        log.warning("No config provided to SQLiteLogger")
+        cursor.execute('''
+            INSERT INTO experiments (name, timestamp) VALUES (?, ?)
+        ''', (self._name, self._start_time.isoformat()))
     
-    @rank_zero_only
-    def log_hyperparams(self, params):
-        """Optionally log hyperparameters"""
-        pass
+    self._experiment_id = cursor.lastrowid
+    conn.commit()
+    conn.close()
+    log.info(f"✓ Created experiment with ID: {self._experiment_id}")
+  
+  @property
+  def name(self):
+    return self._name
+  
+  @property
+  def version(self):
+    return self._experiment_id
+  
+  @property
+  def experiment_id(self):
+    return self._experiment_id
+  
+  @rank_zero_only
+  def log_metrics(self, metrics, step=None):
+    """Don't log per-epoch metrics - only final results matter"""
+    pass
+  
+  @rank_zero_only
+  def log_hyperparams(self, params):
+    """Already handled in _create_experiment"""
+    pass
+  
+  @rank_zero_only
+  def update_final_results(self, train_losses, val_losses, test_metrics):
+    """Update the single row with final results after training/testing completes
     
-    def save(self):
-        """Optional: implement save logic"""
-        pass
+    Args:
+        train_losses: List of training losses per epoch
+        val_losses: List of validation losses per epoch
+        test_metrics: Dict containing:
+            - mae_avg, rmse_avg, r2_avg: Overall metrics
+            - per_target: List of dicts with {name, mae, rmse, r2, mare_tf, mare_ar}
+    """
+    import json
     
-    def finalize(self, status):
-        """Optional: implement finalization logic"""
-        pass
+    conn = sqlite3.connect(self.db_path)
+    cursor = conn.cursor()
+    
+    # Calculate duration
+    duration = (datetime.now() - self._start_time).total_seconds()
+    
+    # Format per-target metrics as JSON
+    target_metrics_json = json.dumps(test_metrics.get('per_target', []))
+    
+    cursor.execute('''
+        UPDATE experiments SET
+            final_train_loss = ?,
+            final_val_loss = ?,
+            min_train_loss = ?,
+            min_val_loss = ?,
+            mae_avg = ?,
+            rmse_avg = ?,
+            r2_avg = ?,
+            target_metrics = ?,
+            duration_seconds = ?,
+            completed_at = ?,
+            status = 'completed'
+        WHERE id = ?
+    ''', (
+        train_losses[-1] if train_losses else None,
+        val_losses[-1] if val_losses else None,
+        min(train_losses) if train_losses else None,
+        min(val_losses) if val_losses else None,
+        test_metrics.get('mae_avg'),
+        test_metrics.get('rmse_avg'),
+        test_metrics.get('r2_avg'),
+        target_metrics_json,
+        duration,
+        datetime.now().isoformat(),
+        self._experiment_id
+    ))
+    
+    conn.commit()
+    conn.close()
+    log.info(f"✓ Updated final results for experiment {self._experiment_id}")
+  
+  def save(self):
+    pass
+  
+  def finalize(self, status):
+    """Mark experiment as complete/failed"""
+    conn = sqlite3.connect(self.db_path)
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        UPDATE experiments SET status = ?, completed_at = ?
+        WHERE id = ?
+    ''', (status, datetime.now().isoformat(), self._experiment_id))
+    
+    conn.commit()
+    conn.close()

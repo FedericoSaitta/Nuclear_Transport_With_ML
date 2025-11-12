@@ -1,6 +1,5 @@
 from omegaconf import OmegaConf
-import os
-import lightning as L
+import torch
 
 # Personal Imports
 import ML.datamodule.DNN_Datamodule as DNN_Datamodule
@@ -8,7 +7,9 @@ import ML.models.DNN_Model as DNN_Model
 import ML.models.modes as modes
 
 if __name__ == "__main__":
-
+  # Allow use of tensor cores if present
+  torch.set_float32_matmul_precision('high')
+ 
   cfg = OmegaConf.load("test_config.yaml")
   datamodule = DNN_Datamodule.DNN_Datamodule(cfg)
   lightning_mode = cfg.runtime.mode

@@ -1,5 +1,4 @@
 # This file is used to reshape and mold the csv dataset to be more approachable for ML
-import pandas as pd
 import numpy as np
 import re
 import glob
@@ -8,13 +7,14 @@ from loguru import logger
 import torch
 from torch.utils.data import TensorDataset
 import h5py
+import polars as pl
 
 
-def check_duplicates(pandas_df):
+def check_duplicates(polars_df):
   # Get all columns except 'run_label'
-  cols_to_check = [col for col in pandas_df.columns if col != 'run_label']
+  cols_to_check = [col for col in polars_df.columns if col != 'run_label']
   
-  if pandas_df.duplicated(subset=cols_to_check).any():
+  if polars_df.select(cols_to_check).is_duplicated().any():
     logger.warning("The DataFrame contains duplicate rows (ignoring run_label).")
     return True
   else:
@@ -22,23 +22,27 @@ def check_duplicates(pandas_df):
     return False
 
 
-def remove_empty_columns(pandas_df):
+def remove_empty_columns(polars_df):
   removed_columns = []
   
-  for col in pandas_df.columns:
-    # Check if all values are 0 or NaN
-    if pandas_df[col].replace(0, np.nan).isna().all():
+  for col in polars_df.columns:
+    # Check if all values are 0 or null
+    col_data = polars_df[col]
+    if ((col_data == 0) | col_data.is_null()).all():
       removed_columns.append(col)
-      pandas_df.drop(columns=col, inplace=True)
   
-  if removed_columns: logger.warning(f"Removed columns: {removed_columns}")
-  else: logger.info("No empty columns to remove.")
+  # Drop the empty columns
+  if removed_columns:
+    polars_df = polars_df.drop(removed_columns)
+    logger.warning(f"Removed columns: {removed_columns}")
+  else:
+    logger.info("No empty columns to remove.")
   
-  return pandas_df
+  return polars_df
 
 
-def detect_run_length(pandas_df, time_col='time_days'):
-  time_values = pandas_df[time_col].values
+def detect_run_length(polars_df, time_col='time_days'):
+  time_values = polars_df[time_col].to_numpy()
   
   # Find where time resets (time[i] <= time[i-1])
   for i in range(1, len(time_values)):
@@ -47,12 +51,14 @@ def detect_run_length(pandas_df, time_col='time_days'):
       return i
 
   # If no reset found, entire dataframe is one run
-  return len(pandas_df)
+  return len(polars_df)
+
 
 def read_h5_file(file_path):
   with h5py.File(file_path, "r") as f:
-      # Get all column names in original order
-      all_columns = [col for col in f["all_columns"][:]]
+      # Get all column names in original order and decode them
+      all_columns = [col.decode('utf-8') if isinstance(col, bytes) else str(col) 
+                     for col in f["all_columns"][:]]
       
       # Initialize dictionary to store data
       data_dict = {}
@@ -60,7 +66,9 @@ def read_h5_file(file_path):
       # Read numeric data
       if "numeric_data" in f:
           numeric_data = f["numeric_data"][:]
-          numeric_columns = [col for col in f["numeric_columns"][:]]
+          # Decode numeric column names
+          numeric_columns = [col.decode('utf-8') if isinstance(col, bytes) else str(col) 
+                            for col in f["numeric_columns"][:]]
           
           # Add each numeric column to the dictionary
           for i, col in enumerate(numeric_columns):
@@ -68,7 +76,9 @@ def read_h5_file(file_path):
       
       # Read string data (if any)
       if "string_columns" in f:
-          string_columns = [col for col in f["string_columns"][:]]
+          # Decode string column names
+          string_columns = [col.decode('utf-8') if isinstance(col, bytes) else str(col) 
+                           for col in f["string_columns"][:]]
           
           for col in string_columns:
               string_data = f[f"string_{col}"][:]
@@ -90,16 +100,15 @@ def read_data(file_path, fraction_of_data, drop_run_label=True):
   logger.info(f'Reading data from: {file_path}')
   
   if '.csv' in file_path:
-    df = pd.read_csv(file_path)
+    df = pl.read_csv(file_path)
   elif '.h5' in file_path:
     df = read_h5_file(file_path)
-
 
   df = remove_empty_columns(df)
   
   # Drop the 'run_label' column if it exists
   if drop_run_label and 'run_label' in df.columns:
-    df = df.drop(columns=['run_label'])
+    df = df.drop('run_label')
   
   check_duplicates(df)  # Checking if entire dataset has duplicates
 
@@ -109,10 +118,11 @@ def read_data(file_path, fraction_of_data, drop_run_label=True):
   if fraction_of_data < 1.0:
     total_runs = df.shape[0] / run_length 
     runs_kept = int(fraction_of_data * total_runs)  # Find the closest integer run number
-    df = df.iloc[0:runs_kept*run_length]
+    df = df.slice(0, runs_kept * run_length)
     logger.info(f"Cutting Down Dataset to {fraction_of_data*100}%, runs present: {runs_kept}")
 
   return df, run_length
+
 
 def print_dataset_stats(df):
   logger.info("=== Dataset Statistics ===")
@@ -121,12 +131,13 @@ def print_dataset_stats(df):
   logger.info(f"Number of rows (time steps): {df.shape[0]}")
   logger.info(f"Number of columns: {df.shape[1]}")
 
-  numeric_cols = df.select_dtypes(include=[np.number]).columns
+  # Get numeric columns
+  numeric_cols = [col for col in df.columns if df[col].dtype in [pl.Float32, pl.Float64, pl.Int32, pl.Int64, pl.UInt32, pl.UInt64]]
 
   # Select only columns that look like isotopes
   isotope_cols = [col for col in numeric_cols if re.match(r'^[A-Za-z]+[0-9]+(_.*)?$', col)]
 
-  first_row = df.iloc[0]
+  first_row = df.row(0, named=True)
   nonzero_isotopes = [col for col in isotope_cols if first_row[col] != 0]
 
   logger.info(f"Number of element columns: {len(isotope_cols)}")
@@ -135,12 +146,12 @@ def print_dataset_stats(df):
   
 
 def filter_columns(df, input_features):
-  return df[input_features].copy() 
+  return df.select(input_features)
 
 
 def split_df(df, input_keys):
   # Filter to only requested columns
-  filtered_df = df[[col for col in df.columns if col in input_keys]]
+  filtered_df = df.select([col for col in df.columns if col in input_keys])
   data_array = filtered_df.to_numpy()
   col_index_map = {col: idx for idx, col in enumerate(filtered_df.columns)}
   return data_array, col_index_map

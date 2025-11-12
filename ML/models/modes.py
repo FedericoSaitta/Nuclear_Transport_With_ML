@@ -40,7 +40,11 @@ def train_and_test(datamodule, model, cfg):
   mp.set_sharing_strategy('file_system') # Reduced the number of open files that each worker creates
   
   # Create CSV logger that saves to results folder instead of lightnig logs
-  sqlite_logger = SQLiteLogger(db_path='my_metrics.db', name='my_experiment')
+  sqlite_logger = SQLiteLogger(
+    db_path='Model_Training.db',
+    name=cfg.model.name,  # or 'my_experiment'
+    config=cfg  # Make sure you're passing the config!
+  )
   
   model = model(config_object=cfg)
   trainer = L.Trainer(
