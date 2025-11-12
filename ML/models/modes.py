@@ -8,6 +8,7 @@ from lightning.pytorch.callbacks import ModelCheckpoint
 from lightning.pytorch.loggers import CSVLogger
 import torch.multiprocessing as mp
 
+from ML.sql_lite_logger import SQLiteLogger
 
 def train_and_test(datamodule, model, cfg):
   model_name = cfg.model.name
@@ -39,7 +40,7 @@ def train_and_test(datamodule, model, cfg):
   mp.set_sharing_strategy('file_system') # Reduced the number of open files that each worker creates
   
   # Create CSV logger that saves to results folder instead of lightnig logs
-  csv_logger = CSVLogger(save_dir=result_dir, name='', version='')
+  sqlite_logger = SQLiteLogger(db_path='my_metrics.db', name='my_experiment')
   
   model = model(config_object=cfg)
   trainer = L.Trainer(
@@ -47,7 +48,7 @@ def train_and_test(datamodule, model, cfg):
     accelerator=cfg.runtime.device,
     devices="auto",
     callbacks=callbacks,
-    logger=csv_logger, 
+    logger=sqlite_logger, 
   )
 
   # Train the model
