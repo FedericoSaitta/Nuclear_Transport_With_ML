@@ -218,11 +218,11 @@ def plot_feature_importance(importance_means, importance_stds, feature_names, ba
     value = importance_means[idx]
     std = importance_stds[idx]
     # Position text at the end of the bar
-    plt.text(value + std + 0.001, i, f'{value:.4f}±{std:.4f}', va='center', fontsize=11, fontweight='bold')
+    plt.text(value + std + 0.003, i, f'{value:.4f}±{std:.4f}', va='center', fontsize=11, fontweight='bold')
   
-  # Extend x-axis by 10% to fit text
+  # Extend x-axis by 25% to fit text
   current_xlim = plt.xlim()
-  plt.xlim(current_xlim[0], current_xlim[1] * 1.2)
+  plt.xlim(current_xlim[0], current_xlim[1] * 1.25)
   
   plt.yticks(range(n_top), [feature_names[i] for i in top_indices])
   plt.xlabel(f'Permutation Importance {metric_name}', fontsize=12)

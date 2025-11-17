@@ -4,9 +4,9 @@ dataset:
 
   inputs:
     power_W_g: "MinMax"
-    int_p_W: "robust"
     fuel_temp_K: "MinMax"
     mod_temp_K: "MinMax"
+    clad_temp_K: "MinMax"
     mod_density_g_cm3: "MinMax"
     boron_ppm: "MinMax"
     U235: "robust"
@@ -18,12 +18,7 @@ dataset:
   
   # Target features with scaling
   targets:
-    U235: "robust"
-    U233: "robust"
-    U238: "robust"
-    Pu239: "robust"
-    Pu240: "robust"
-    Pu241: "robust"
+    k_eff: "robust"
 
   target_delta_conc: True # Uses concentration differences instead of absolute values as targets
 
@@ -34,7 +29,7 @@ dataset:
     batch_size: 8192 # As large as possible to speed up
 
 model:
-  name: "tesing_sql_h5"
+  name: "testing_keff"
   layers: [64, 64]         
   dropout_probability: 0.1
   activation: "gelu"  # Options: relu, tanh, sigmoid, leaky_relu, elu, gelu
@@ -54,7 +49,6 @@ train:
 runtime:
   mode: "train"    # Options: train, train_from_ckp
   ckp_path: 'results/SimpleDNN/best-SimpleDNN-epoch=397.ckpt'
-
   device: "cuda"
   seed: 42
   drop_last: false

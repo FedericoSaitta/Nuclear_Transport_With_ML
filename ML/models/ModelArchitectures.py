@@ -17,7 +17,7 @@ class SimpleDNN(nn.Module):
     self.output_activation_fn = get_activation(output_activation)
 
   def forward(self, x):
-    for i, layer in enumerate(self.layers[:-1]):
+    for layer in self.layers[:-1]:
       residual = x  # store input for skip connection
       x = layer(x)
       x = self.activation_fn(x)

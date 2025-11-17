@@ -7,7 +7,8 @@ dataset:
     fuel_temp_K: "MinMax"
     mod_temp_K: "MinMax"
     mod_density_g_cm3: "MinMax"
-    boron_ppm: "MinMax"
+    boron_ppm: "MinMax"    
+    clad_temp_K: "MinMax"
     # Uranium 235 only
     U235: "robust"
 
@@ -15,7 +16,6 @@ dataset:
   # Target features with scaling
   targets:
     U235: "robust"
-
 
   target_delta_conc: True # Uses concentration differences instead of absolute values as targets
 
@@ -50,5 +50,5 @@ runtime:
   device: "cuda"
   seed: 42
   drop_last: false
-  num_workers: 14
-  model_database: 'Simplemodels.db'
+  num_workers: 15
+  model_database: 'U235_models.db'

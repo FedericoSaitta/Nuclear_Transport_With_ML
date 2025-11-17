@@ -2,7 +2,7 @@ import sqlite3
 from datetime import datetime
 from pytorch_lightning.loggers import Logger
 from pytorch_lightning.utilities import rank_zero_only
-from loguru import logger as log
+from loguru import logger
 import json
 
 class SQLiteLogger(Logger):
@@ -83,7 +83,6 @@ class SQLiteLogger(Logger):
     
     conn.commit()
     conn.close()
-    log.info(f"✓ Database initialized at: {self.db_path}")
   
   def _create_experiment(self):
     """Create a new experiment entry with hyperparameters"""
@@ -177,10 +176,8 @@ class SQLiteLogger(Logger):
                 delta_conc
             ))
             
-            log.info(f"✓ Logged hyperparameters: lr={learning_rate}, batch_size={batch_size}, epochs={epochs}")
-            
         except Exception as e:
-            log.error(f"Error extracting config values: {e}")
+            logger.error(f"Error extracting config values: {e}")
             import traceback
             traceback.print_exc()
             # Fall back to minimal insert
@@ -188,7 +185,7 @@ class SQLiteLogger(Logger):
                 INSERT INTO experiments (name, timestamp) VALUES (?, ?)
             ''', (self._name, self._start_time.isoformat()))
     else:
-        log.warning("No config provided to SQLiteLogger")
+        logger.warning("No config provided to SQLiteLogger")
         cursor.execute('''
             INSERT INTO experiments (name, timestamp) VALUES (?, ?)
         ''', (self._name, self._start_time.isoformat()))
@@ -196,7 +193,6 @@ class SQLiteLogger(Logger):
     self._experiment_id = cursor.lastrowid
     conn.commit()
     conn.close()
-    log.info(f"✓ Created experiment with ID: {self._experiment_id}")
   
   @property
   def name(self):

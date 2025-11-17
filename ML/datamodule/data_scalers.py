@@ -10,6 +10,7 @@ from sklearn.preprocessing import (
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.compose import ColumnTransformer
 from loguru import logger
+import numpy as np
 
 
 # No-operation scaler that returns data unchanged
@@ -109,40 +110,40 @@ def print_transformer_summary(column_transformer, col_index_map):
 
 
 def create_column_transformer(scaler_dict, col_index_map):
-    # If only one column, return the scaler directly (like old single-target code)
-    if len(scaler_dict) == 1:
-        col_name = list(scaler_dict.keys())[0]
-        scaler = scaler_dict[col_name]
-        logger.info(f"Using single scaler for '{col_name}': {scaler.__class__.__name__}")
-        return scaler
-    
-    # Multiple columns - use ColumnTransformer
-    transformers = []
-    
-    # Sort columns by their index to maintain original order
-    sorted_cols = sorted(col_index_map.items(), key=lambda x: x[1])
-    
-    for col_name, col_idx in sorted_cols:
-        if col_name in scaler_dict:
-            scaler = scaler_dict[col_name]
-            transformers.append((f"{col_name}", scaler, [col_idx]))
-        else:
-            raise ValueError(
-                f"Column '{col_name}' with index {col_idx} is not in the scaler dictionary.\n"
-                f"Available scalers: {list(scaler_dict.keys())}"
-            )
-    
-    # Create ColumnTransformer
-    column_transformer = ColumnTransformer(
-        transformers=transformers,
-        sparse_threshold=0,  # Return dense array
-        verbose_feature_names_out=False
-    )
-    
-    logger.info(f"Created ColumnTransformer with {len(transformers)} transformers")
-    print_transformer_summary(column_transformer, col_index_map)
-    
-    return column_transformer
+  # If only one column, return the scaler directly (like old single-target code)
+  if len(scaler_dict) == 1:
+    col_name = list(scaler_dict.keys())[0]
+    scaler = scaler_dict[col_name]
+    logger.info(f"Using single scaler for '{col_name}': {scaler.__class__.__name__}")
+    return scaler
+  
+  # Multiple columns - use ColumnTransformer
+  transformers = []
+  
+  # Sort columns by their index to maintain original order
+  sorted_cols = sorted(col_index_map.items(), key=lambda x: x[1])
+  
+  for col_name, col_idx in sorted_cols:
+    if col_name in scaler_dict:
+      scaler = scaler_dict[col_name]
+      transformers.append((f"{col_name}", scaler, [col_idx]))
+    else:
+      raise ValueError(
+        f"Column '{col_name}' with index {col_idx} is not in the scaler dictionary.\n"
+        f"Available scalers: {list(scaler_dict.keys())}"
+      )
+  
+  # Create ColumnTransformer
+  column_transformer = ColumnTransformer(
+    transformers=transformers,
+    sparse_threshold=0,  # Return dense array
+    verbose_feature_names_out=False
+  )
+  
+  logger.info(f"Created ColumnTransformer with {len(transformers)} transformers")
+  print_transformer_summary(column_transformer, col_index_map)
+  
+  return column_transformer
 
 
 def inverse_transformer(column_transformer, X):
