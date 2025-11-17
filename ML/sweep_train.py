@@ -10,7 +10,7 @@ import ML.models.modes as modes
 
 from sweeper import ConfigSweeper
 from sweeper import ConfigPathForSweeper
-from sweeper import generate_permutations
+from sweeper import generate_permutations, set_cfg_value
 
 sweep_space = {
 
@@ -47,7 +47,7 @@ if __name__ == "__main__":
 
         # start from clean base YAML each time
         model.reset()
-        cfg: DictConfig = model.get_cfg()
+        cfg = model.get_cfg()
 
         # apply all chosen values for this permutation
         for path, value in combo.items():

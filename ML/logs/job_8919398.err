@@ -1,0 +1,475 @@
+GPU available: True (cuda), used: True
+TPU available: False, using: 0 TPU cores
+HPU available: False, using: 0 HPUs
+2025-11-17 18:06:22.977 | INFO     | ML.datamodule.DNN_Datamodule:setup:38 - Setting up the data module...
+2025-11-17 18:06:22.977 | INFO     | ML.datamodule.dataset_helper:read_data:95 - Reading data from: data/casl_3305_runs_inter.h5
+2025-11-17 18:06:29.346 | WARNING  | ML.datamodule.dataset_helper:remove_empty_columns:32 - Removed columns: ['B10', 'B11', 'Er162', 'Er164', 'Er166', 'Er167', 'Er168', 'Er169', 'Er170', 'Er171', 'Eu152_m1', 'Hf174', 'Hf176', 'Hf177', 'Hf178', 'Hf179', 'Hf180', 'Hf181', 'Ta181', 'Ta182', 'Tm169', 'Tm170', 'Tm171']
+2025-11-17 18:06:29.877 | INFO     | ML.datamodule.dataset_helper:check_duplicates:16 - The DataFrame has no duplicate rows (ignoring run_label).
+2025-11-17 18:06:29.965 | INFO     | ML.datamodule.dataset_helper:read_data:111 - Detected Run Length: 101
+2025-11-17 18:06:29.965 | INFO     | ML.datamodule.dataset_helper:print_dataset_stats:124 - === Dataset Statistics ===
+2025-11-17 18:06:29.965 | INFO     | ML.datamodule.dataset_helper:print_dataset_stats:127 - Number of rows (time steps): 333805
+2025-11-17 18:06:29.965 | INFO     | ML.datamodule.dataset_helper:print_dataset_stats:128 - Number of columns: 215
+2025-11-17 18:06:29.966 | INFO     | ML.datamodule.dataset_helper:print_dataset_stats:139 - Number of element columns: 205
+2025-11-17 18:06:29.966 | INFO     | ML.datamodule.dataset_helper:print_dataset_stats:140 - Number of state columns: 10
+2025-11-17 18:06:29.966 | INFO     | ML.datamodule.dataset_helper:print_dataset_stats:141 - Isotopes with non-zero concentration at t=0:
+2025-11-17 18:06:29.970 | INFO     | ML.datamodule.data_scalers:create_column_transformer:143 - Created ColumnTransformer with 7 transformers
+2025-11-17 18:06:29.970 | INFO     | ML.datamodule.data_scalers:print_transformer_summary:96 - ColumnTransformer Summary:
+2025-11-17 18:06:29.970 | INFO     | ML.datamodule.data_scalers:print_transformer_summary:109 -   MinMaxScaler: ['power_W_g']
+2025-11-17 18:06:29.970 | INFO     | ML.datamodule.data_scalers:print_transformer_summary:109 -   MinMaxScaler: ['fuel_temp_K']
+2025-11-17 18:06:29.970 | INFO     | ML.datamodule.data_scalers:print_transformer_summary:109 -   MinMaxScaler: ['mod_temp_K']
+2025-11-17 18:06:29.970 | INFO     | ML.datamodule.data_scalers:print_transformer_summary:109 -   MinMaxScaler: ['mod_density_g_cm3']
+2025-11-17 18:06:29.970 | INFO     | ML.datamodule.data_scalers:print_transformer_summary:109 -   MinMaxScaler: ['boron_ppm']
+2025-11-17 18:06:29.970 | INFO     | ML.datamodule.data_scalers:print_transformer_summary:109 -   MinMaxScaler: ['clad_temp_K']
+2025-11-17 18:06:29.970 | INFO     | ML.datamodule.data_scalers:print_transformer_summary:109 -   MinMaxScaler: ['U235']
+2025-11-17 18:06:29.970 | INFO     | ML.datamodule.data_scalers:create_column_transformer:117 - Using single scaler for 'U235': MinMaxScaler
+2025-11-17 18:06:29.970 | INFO     | ML.datamodule.dataset_helper:create_timeseries_targets:162 - {'power_W_g': 0, 'fuel_temp_K': 1, 'mod_temp_K': 2, 'mod_density_g_cm3': 3, 'boron_ppm': 4, 'clad_temp_K': 5, 'U235': 6}
+2025-11-17 18:06:30.065 | INFO     | ML.datamodule.dataset_helper:create_timeseries_targets:187 - Detected 3305 runs
+2025-11-17 18:06:30.066 | INFO     | ML.datamodule.dataset_helper:create_timeseries_targets:188 - Created 330500 training samples
+2025-11-17 18:06:30.066 | INFO     | ML.datamodule.dataset_helper:create_timeseries_targets:189 - Input shape: (330500, 7) | Target shape: (330500, 1)
+2025-11-17 18:06:30.066 | INFO     | ML.datamodule.dataset_helper:timeseries_train_val_test_split:211 - Total runs detected: 3305
+2025-11-17 18:06:30.066 | INFO     | ML.datamodule.dataset_helper:timeseries_train_val_test_split:212 - Steps per run: 100
+2025-11-17 18:06:30.066 | INFO     | ML.datamodule.dataset_helper:timeseries_train_val_test_split:219 - Split: 2644 train runs, 330 val runs, 331 test runs
+2025-11-17 18:06:30.066 | INFO     | ML.datamodule.dataset_helper:timeseries_train_val_test_split:235 - Before shuffle - Train: 264400, Val: 33000, Test: 33100
+2025-11-17 18:06:30.070 | INFO     | ML.datamodule.dataset_helper:timeseries_train_val_test_split:256 - Training runs shuffled (keeping time steps within each run intact)
+2025-11-17 18:06:30.070 | INFO     | ML.datamodule.dataset_helper:timeseries_train_val_test_split:258 - Final split sizes - Train: 264400, Val: 33000, Test: 33100
+2025-11-17 18:06:32.277 | INFO     | ML.utils.plot:plot_data_distributions:124 - Feature distributions saved to: results/run_1/Raw_Inputs_distribution_features.png
+2025-11-17 18:06:32.579 | INFO     | ML.utils.plot:plot_data_distributions:124 - Feature distributions saved to: results/run_1/Raw_Targets_distribution_features.png
+2025-11-17 18:06:34.298 | INFO     | ML.utils.plot:plot_data_distributions:124 - Feature distributions saved to: results/run_1/Scaled_Inputs_distribution_features.png
+2025-11-17 18:06:34.552 | INFO     | ML.utils.plot:plot_data_distributions:124 - Feature distributions saved to: results/run_1/Scaled_Targets_distribution_features.png
+2025-11-17 18:06:34.624 | INFO     | ML.datamodule.DNN_Datamodule:setup:79 - Training dataset size: 264400
+2025-11-17 18:06:34.624 | INFO     | ML.datamodule.DNN_Datamodule:setup:80 - Validation dataset size: 33000
+2025-11-17 18:06:34.624 | INFO     | ML.datamodule.DNN_Datamodule:setup:81 - Test dataset size: 33100
+/mnt/iusers01/fse-ugpgt01/phy01/u97798ac/.local/lib/python3.9/site-packages/lightning/pytorch/callbacks/model_checkpoint.py:751: Checkpoint directory /net/scratch/u97798ac/Nuclear_Transport_With_ML/ML/results/run_1 exists and is not empty.
+LOCAL_RANK: 0 - CUDA_VISIBLE_DEVICES: [0]
+
+  | Name    | Type      | Params | Mode 
+----------------------------------------------
+0 | loss_fn | MSELoss   | 0      | train
+1 | model   | SimpleDNN | 4.7 K  | train
+----------------------------------------------
+4.7 K     Trainable params
+0         Non-trainable params
+4.7 K     Total params
+0.019     Total estimated model params size (MB)
+9         Modules in train mode
+0         Modules in eval mode
+SLURM auto-requeueing enabled. Setting signal handlers.
+2025-11-17 18:07:28.558 | INFO     | ML.utils.plot:plot_losses:146 - Logarithmic Train and Validation Losses saved to: results/run_1/training_loss_log.png
+2025-11-17 18:07:28.774 | INFO     | ML.models.modes:train_and_test:64 - Best model saved at: /net/scratch/u97798ac/Nuclear_Transport_With_ML/ML/results/run_1/best-run_1-epoch=40.ckpt
+Restoring states from the checkpoint path at /net/scratch/u97798ac/Nuclear_Transport_With_ML/ML/results/run_1/best-run_1-epoch=40.ckpt
+LOCAL_RANK: 0 - CUDA_VISIBLE_DEVICES: [0]
+Loaded model weights from the checkpoint at /net/scratch/u97798ac/Nuclear_Transport_With_ML/ML/results/run_1/best-run_1-epoch=40.ckpt
+SLURM auto-requeueing enabled. Setting signal handlers.
+2025-11-17 18:07:28.973 | INFO     | ML.models.DNN_Model:on_test_epoch_end:130 - Test set shape - True: (33100, 1), Pred: (33100, 1)
+2025-11-17 18:07:28.974 | INFO     | ML.models.DNN_Model:_compute_and_log_overall_metrics:214 - 
+====================
+2025-11-17 18:07:28.974 | INFO     | ML.models.DNN_Model:_compute_and_log_overall_metrics:215 - OVERALL METRICS (averaged across 1 outputs)
+2025-11-17 18:07:28.974 | INFO     | ML.models.DNN_Model:_compute_and_log_overall_metrics:216 - ====================
+2025-11-17 18:07:28.974 | INFO     | ML.models.DNN_Model:_compute_and_log_overall_metrics:217 - Overall MAE: 0.0000
+2025-11-17 18:07:28.974 | INFO     | ML.models.DNN_Model:_compute_and_log_overall_metrics:218 - Overall RMSE: 0.0000
+2025-11-17 18:07:28.974 | INFO     | ML.models.DNN_Model:_compute_and_log_overall_metrics:219 - Overall R²: 0.9953
+2025-11-17 18:07:28.977 | INFO     | ML.models.DNN_Model:_process_single_output:232 - 
+====================
+2025-11-17 18:07:28.977 | INFO     | ML.models.DNN_Model:_process_single_output:233 - Output 1: U235
+2025-11-17 18:07:28.977 | INFO     | ML.models.DNN_Model:_process_single_output:234 - ====================
+2025-11-17 18:07:28.977 | INFO     | ML.models.DNN_Model:_process_single_output:235 - MAE:  0.000000
+2025-11-17 18:07:28.977 | INFO     | ML.models.DNN_Model:_process_single_output:236 - RMSE: 0.000000
+2025-11-17 18:07:28.977 | INFO     | ML.models.DNN_Model:_process_single_output:237 - R²:   0.995303
+2025-11-17 18:07:29.812 | INFO     | ML.utils.plot:plot_predictions_vs_actuals:167 - Model predictions saved to: results/run_1/U235/predictions_vs_actual.png
+2025-11-17 18:07:30.677 | INFO     | ML.utils.plot:plot_residuals_combined:196 - Model prediction residuals saved to: results/run_1/U235/residuals_combined.png
+2025-11-17 18:07:30.677 | INFO     | ML.models.DNN_Model:_compute_mare_comparison:247 - 
+====================
+2025-11-17 18:07:30.677 | INFO     | ML.models.DNN_Model:_compute_mare_comparison:248 - MARE: Teacher-Forcing vs Autoregressive
+2025-11-17 18:07:30.677 | INFO     | ML.models.DNN_Model:_compute_mare_comparison:249 - ====================
+2025-11-17 18:07:30.679 | INFO     | ML.utils.metrics:model_autoregress:200 - Running autoregressive predictions for 331 runs (100 steps each)
+2025-11-17 18:07:30.680 | INFO     | ML.utils.metrics:model_autoregress:201 - 100
+
+Autoregressive MARE:   0%|          | 0/331 [00:00<?, ?run/s][A
+Autoregressive MARE:   0%|          | 1/331 [00:00<00:43,  7.52run/s][A
+Autoregressive MARE:   1%|          | 2/331 [00:00<00:43,  7.63run/s][A
+Autoregressive MARE:   1%|          | 3/331 [00:00<00:42,  7.68run/s][A
+Autoregressive MARE:   1%|          | 4/331 [00:00<00:42,  7.70run/s][A
+Autoregressive MARE:   2%|▏         | 5/331 [00:00<00:42,  7.72run/s][A
+Autoregressive MARE:   2%|▏         | 6/331 [00:00<00:42,  7.74run/s][A
+Autoregressive MARE:   2%|▏         | 7/331 [00:00<00:41,  7.75run/s][A
+Autoregressive MARE:   2%|▏         | 8/331 [00:01<00:41,  7.76run/s][A
+Autoregressive MARE:   3%|▎         | 9/331 [00:01<00:41,  7.76run/s][A
+Autoregressive MARE:   3%|▎         | 10/331 [00:01<00:41,  7.76run/s][A
+Autoregressive MARE:   3%|▎         | 11/331 [00:01<00:41,  7.78run/s][A
+Autoregressive MARE:   4%|▎         | 12/331 [00:01<00:40,  7.80run/s][A
+Autoregressive MARE:   4%|▍         | 13/331 [00:01<00:40,  7.81run/s][A
+Autoregressive MARE:   4%|▍         | 14/331 [00:01<00:40,  7.82run/s][A
+Autoregressive MARE:   5%|▍         | 15/331 [00:01<00:40,  7.82run/s][A
+Autoregressive MARE:   5%|▍         | 16/331 [00:02<00:40,  7.82run/s][A
+Autoregressive MARE:   5%|▌         | 17/331 [00:02<00:40,  7.80run/s][A
+Autoregressive MARE:   5%|▌         | 18/331 [00:02<00:40,  7.81run/s][A
+Autoregressive MARE:   6%|▌         | 19/331 [00:02<00:39,  7.82run/s][A
+Autoregressive MARE:   6%|▌         | 20/331 [00:02<00:39,  7.82run/s][A
+Autoregressive MARE:   6%|▋         | 21/331 [00:02<00:39,  7.82run/s][A
+Autoregressive MARE:   7%|▋         | 22/331 [00:02<00:39,  7.83run/s][A
+Autoregressive MARE:   7%|▋         | 23/331 [00:02<00:39,  7.83run/s][A
+Autoregressive MARE:   7%|▋         | 24/331 [00:03<00:39,  7.83run/s][A
+Autoregressive MARE:   8%|▊         | 25/331 [00:03<00:39,  7.83run/s][A
+Autoregressive MARE:   8%|▊         | 26/331 [00:03<00:38,  7.83run/s][A
+Autoregressive MARE:   8%|▊         | 27/331 [00:03<00:38,  7.83run/s][A
+Autoregressive MARE:   8%|▊         | 28/331 [00:03<00:38,  7.83run/s][A
+Autoregressive MARE:   9%|▉         | 29/331 [00:03<00:38,  7.82run/s][A
+Autoregressive MARE:   9%|▉         | 30/331 [00:03<00:38,  7.82run/s][A
+Autoregressive MARE:   9%|▉         | 31/331 [00:03<00:38,  7.83run/s][A
+Autoregressive MARE:  10%|▉         | 32/331 [00:04<00:38,  7.81run/s][A
+Autoregressive MARE:  10%|▉         | 33/331 [00:04<00:38,  7.82run/s][A
+Autoregressive MARE:  10%|█         | 34/331 [00:04<00:37,  7.82run/s][A
+Autoregressive MARE:  11%|█         | 35/331 [00:04<00:37,  7.83run/s][A
+Autoregressive MARE:  11%|█         | 36/331 [00:04<00:37,  7.83run/s][A
+Autoregressive MARE:  11%|█         | 37/331 [00:04<00:37,  7.83run/s][A
+Autoregressive MARE:  11%|█▏        | 38/331 [00:04<00:37,  7.83run/s][A
+Autoregressive MARE:  12%|█▏        | 39/331 [00:04<00:37,  7.83run/s][A
+Autoregressive MARE:  12%|█▏        | 40/331 [00:05<00:37,  7.83run/s][A
+Autoregressive MARE:  12%|█▏        | 41/331 [00:05<00:37,  7.82run/s][A
+Autoregressive MARE:  13%|█▎        | 42/331 [00:05<00:37,  7.79run/s][A
+Autoregressive MARE:  13%|█▎        | 43/331 [00:05<00:36,  7.80run/s][A
+Autoregressive MARE:  13%|█▎        | 44/331 [00:05<00:36,  7.80run/s][A
+Autoregressive MARE:  14%|█▎        | 45/331 [00:05<00:36,  7.80run/s][A
+Autoregressive MARE:  14%|█▍        | 46/331 [00:05<00:36,  7.80run/s][A
+Autoregressive MARE:  14%|█▍        | 47/331 [00:06<00:36,  7.81run/s][A
+Autoregressive MARE:  15%|█▍        | 48/331 [00:06<00:36,  7.82run/s][A
+Autoregressive MARE:  15%|█▍        | 49/331 [00:06<00:36,  7.81run/s][A
+Autoregressive MARE:  15%|█▌        | 50/331 [00:06<00:35,  7.81run/s][A
+Autoregressive MARE:  15%|█▌        | 51/331 [00:06<00:35,  7.81run/s][A
+Autoregressive MARE:  16%|█▌        | 52/331 [00:06<00:35,  7.81run/s][A
+Autoregressive MARE:  16%|█▌        | 53/331 [00:06<00:35,  7.81run/s][A
+Autoregressive MARE:  16%|█▋        | 54/331 [00:06<00:35,  7.81run/s][A
+Autoregressive MARE:  17%|█▋        | 55/331 [00:07<00:35,  7.81run/s][A
+Autoregressive MARE:  17%|█▋        | 56/331 [00:07<00:35,  7.81run/s][A
+Autoregressive MARE:  17%|█▋        | 57/331 [00:07<00:35,  7.82run/s][A
+Autoregressive MARE:  18%|█▊        | 58/331 [00:07<00:34,  7.82run/s][A
+Autoregressive MARE:  18%|█▊        | 59/331 [00:07<00:34,  7.81run/s][A
+Autoregressive MARE:  18%|█▊        | 60/331 [00:07<00:34,  7.81run/s][A
+Autoregressive MARE:  18%|█▊        | 61/331 [00:07<00:34,  7.81run/s][A
+Autoregressive MARE:  19%|█▊        | 62/331 [00:07<00:34,  7.81run/s][A
+Autoregressive MARE:  19%|█▉        | 63/331 [00:08<00:34,  7.81run/s][A
+Autoregressive MARE:  19%|█▉        | 64/331 [00:08<00:34,  7.81run/s][A
+Autoregressive MARE:  20%|█▉        | 65/331 [00:08<00:34,  7.82run/s][A
+Autoregressive MARE:  20%|█▉        | 66/331 [00:08<00:33,  7.82run/s][A
+Autoregressive MARE:  20%|██        | 67/331 [00:08<00:33,  7.78run/s][A
+Autoregressive MARE:  21%|██        | 68/331 [00:08<00:33,  7.79run/s][A
+Autoregressive MARE:  21%|██        | 69/331 [00:08<00:33,  7.80run/s][A
+Autoregressive MARE:  21%|██        | 70/331 [00:08<00:33,  7.80run/s][A
+Autoregressive MARE:  21%|██▏       | 71/331 [00:09<00:33,  7.80run/s][A
+Autoregressive MARE:  22%|██▏       | 72/331 [00:09<00:33,  7.80run/s][A
+Autoregressive MARE:  22%|██▏       | 73/331 [00:09<00:33,  7.80run/s][A
+Autoregressive MARE:  22%|██▏       | 74/331 [00:09<00:32,  7.80run/s][A
+Autoregressive MARE:  23%|██▎       | 75/331 [00:09<00:32,  7.81run/s][A
+Autoregressive MARE:  23%|██▎       | 76/331 [00:09<00:32,  7.81run/s][A
+Autoregressive MARE:  23%|██▎       | 77/331 [00:09<00:32,  7.80run/s][A
+Autoregressive MARE:  24%|██▎       | 78/331 [00:09<00:32,  7.81run/s][A
+Autoregressive MARE:  24%|██▍       | 79/331 [00:10<00:32,  7.79run/s][A
+Autoregressive MARE:  24%|██▍       | 80/331 [00:10<00:32,  7.79run/s][A
+Autoregressive MARE:  24%|██▍       | 81/331 [00:10<00:32,  7.80run/s][A
+Autoregressive MARE:  25%|██▍       | 82/331 [00:10<00:31,  7.80run/s][A
+Autoregressive MARE:  25%|██▌       | 83/331 [00:10<00:31,  7.80run/s][A
+Autoregressive MARE:  25%|██▌       | 84/331 [00:10<00:31,  7.81run/s][A
+Autoregressive MARE:  26%|██▌       | 85/331 [00:10<00:31,  7.80run/s][A
+Autoregressive MARE:  26%|██▌       | 86/331 [00:11<00:31,  7.80run/s][A
+Autoregressive MARE:  26%|██▋       | 87/331 [00:11<00:31,  7.80run/s][A
+Autoregressive MARE:  27%|██▋       | 88/331 [00:11<00:31,  7.79run/s][A
+Autoregressive MARE:  27%|██▋       | 89/331 [00:11<00:31,  7.80run/s][A
+Autoregressive MARE:  27%|██▋       | 90/331 [00:11<00:30,  7.80run/s][A
+Autoregressive MARE:  27%|██▋       | 91/331 [00:11<00:30,  7.80run/s][A
+Autoregressive MARE:  28%|██▊       | 92/331 [00:11<00:30,  7.80run/s][A
+Autoregressive MARE:  28%|██▊       | 93/331 [00:11<00:30,  7.81run/s][A
+Autoregressive MARE:  28%|██▊       | 94/331 [00:12<00:30,  7.81run/s][A
+Autoregressive MARE:  29%|██▊       | 95/331 [00:12<00:30,  7.80run/s][A
+Autoregressive MARE:  29%|██▉       | 96/331 [00:12<00:30,  7.79run/s][A
+Autoregressive MARE:  29%|██▉       | 97/331 [00:12<00:30,  7.79run/s][A
+Autoregressive MARE:  30%|██▉       | 98/331 [00:12<00:29,  7.79run/s][A
+Autoregressive MARE:  30%|██▉       | 99/331 [00:12<00:29,  7.80run/s][A
+Autoregressive MARE:  30%|███       | 100/331 [00:12<00:29,  7.79run/s][A
+Autoregressive MARE:  31%|███       | 101/331 [00:12<00:29,  7.79run/s][A
+Autoregressive MARE:  31%|███       | 102/331 [00:13<00:29,  7.80run/s][A
+Autoregressive MARE:  31%|███       | 103/331 [00:13<00:29,  7.80run/s][A
+Autoregressive MARE:  31%|███▏      | 104/331 [00:13<00:29,  7.79run/s][A
+Autoregressive MARE:  32%|███▏      | 105/331 [00:13<00:29,  7.79run/s][A
+Autoregressive MARE:  32%|███▏      | 106/331 [00:13<00:28,  7.78run/s][A
+Autoregressive MARE:  32%|███▏      | 107/331 [00:13<00:28,  7.79run/s][A
+Autoregressive MARE:  33%|███▎      | 108/331 [00:13<00:28,  7.79run/s][A
+Autoregressive MARE:  33%|███▎      | 109/331 [00:13<00:28,  7.79run/s][A
+Autoregressive MARE:  33%|███▎      | 110/331 [00:14<00:28,  7.78run/s][A
+Autoregressive MARE:  34%|███▎      | 111/331 [00:14<00:28,  7.79run/s][A
+Autoregressive MARE:  34%|███▍      | 112/331 [00:14<00:28,  7.80run/s][A
+Autoregressive MARE:  34%|███▍      | 113/331 [00:14<00:27,  7.80run/s][A
+Autoregressive MARE:  34%|███▍      | 114/331 [00:14<00:27,  7.80run/s][A
+Autoregressive MARE:  35%|███▍      | 115/331 [00:14<00:27,  7.80run/s][A
+Autoregressive MARE:  35%|███▌      | 116/331 [00:14<00:27,  7.79run/s][A
+Autoregressive MARE:  35%|███▌      | 117/331 [00:15<00:27,  7.76run/s][A
+Autoregressive MARE:  36%|███▌      | 118/331 [00:15<00:27,  7.77run/s][A
+Autoregressive MARE:  36%|███▌      | 119/331 [00:15<00:27,  7.77run/s][A
+Autoregressive MARE:  36%|███▋      | 120/331 [00:15<00:27,  7.77run/s][A
+Autoregressive MARE:  37%|███▋      | 121/331 [00:15<00:27,  7.77run/s][A
+Autoregressive MARE:  37%|███▋      | 122/331 [00:15<00:26,  7.77run/s][A
+Autoregressive MARE:  37%|███▋      | 123/331 [00:15<00:26,  7.77run/s][A
+Autoregressive MARE:  37%|███▋      | 124/331 [00:15<00:26,  7.77run/s][A
+Autoregressive MARE:  38%|███▊      | 125/331 [00:16<00:26,  7.78run/s][A
+Autoregressive MARE:  38%|███▊      | 126/331 [00:16<00:26,  7.79run/s][A
+Autoregressive MARE:  38%|███▊      | 127/331 [00:16<00:26,  7.78run/s][A
+Autoregressive MARE:  39%|███▊      | 128/331 [00:16<00:26,  7.78run/s][A
+Autoregressive MARE:  39%|███▉      | 129/331 [00:16<00:25,  7.79run/s][A
+Autoregressive MARE:  39%|███▉      | 130/331 [00:16<00:25,  7.79run/s][A
+Autoregressive MARE:  40%|███▉      | 131/331 [00:16<00:25,  7.78run/s][A
+Autoregressive MARE:  40%|███▉      | 132/331 [00:16<00:25,  7.78run/s][A
+Autoregressive MARE:  40%|████      | 133/331 [00:17<00:25,  7.78run/s][A
+Autoregressive MARE:  40%|████      | 134/331 [00:17<00:25,  7.78run/s][A
+Autoregressive MARE:  41%|████      | 135/331 [00:17<00:25,  7.78run/s][A
+Autoregressive MARE:  41%|████      | 136/331 [00:17<00:25,  7.78run/s][A
+Autoregressive MARE:  41%|████▏     | 137/331 [00:17<00:24,  7.79run/s][A
+Autoregressive MARE:  42%|████▏     | 138/331 [00:17<00:24,  7.78run/s][A
+Autoregressive MARE:  42%|████▏     | 139/331 [00:17<00:24,  7.78run/s][A
+Autoregressive MARE:  42%|████▏     | 140/331 [00:17<00:24,  7.79run/s][A
+Autoregressive MARE:  43%|████▎     | 141/331 [00:18<00:24,  7.76run/s][A
+Autoregressive MARE:  43%|████▎     | 142/331 [00:18<00:24,  7.77run/s][A
+Autoregressive MARE:  43%|████▎     | 143/331 [00:18<00:24,  7.77run/s][A
+Autoregressive MARE:  44%|████▎     | 144/331 [00:18<00:24,  7.78run/s][A
+Autoregressive MARE:  44%|████▍     | 145/331 [00:18<00:23,  7.78run/s][A
+Autoregressive MARE:  44%|████▍     | 146/331 [00:18<00:23,  7.78run/s][A
+Autoregressive MARE:  44%|████▍     | 147/331 [00:18<00:23,  7.78run/s][A
+Autoregressive MARE:  45%|████▍     | 148/331 [00:18<00:23,  7.78run/s][A
+Autoregressive MARE:  45%|████▌     | 149/331 [00:19<00:23,  7.77run/s][A
+Autoregressive MARE:  45%|████▌     | 150/331 [00:19<00:23,  7.77run/s][A
+Autoregressive MARE:  46%|████▌     | 151/331 [00:19<00:23,  7.77run/s][A
+Autoregressive MARE:  46%|████▌     | 152/331 [00:19<00:23,  7.76run/s][A
+Autoregressive MARE:  46%|████▌     | 153/331 [00:19<00:22,  7.77run/s][A
+Autoregressive MARE:  47%|████▋     | 154/331 [00:19<00:22,  7.78run/s][A
+Autoregressive MARE:  47%|████▋     | 155/331 [00:19<00:22,  7.78run/s][A
+Autoregressive MARE:  47%|████▋     | 156/331 [00:20<00:22,  7.78run/s][A
+Autoregressive MARE:  47%|████▋     | 157/331 [00:20<00:22,  7.78run/s][A
+Autoregressive MARE:  48%|████▊     | 158/331 [00:20<00:22,  7.77run/s][A
+Autoregressive MARE:  48%|████▊     | 159/331 [00:20<00:22,  7.77run/s][A
+Autoregressive MARE:  48%|████▊     | 160/331 [00:20<00:22,  7.77run/s][A
+Autoregressive MARE:  49%|████▊     | 161/331 [00:20<00:21,  7.77run/s][A
+Autoregressive MARE:  49%|████▉     | 162/331 [00:20<00:21,  7.77run/s][A
+Autoregressive MARE:  49%|████▉     | 163/331 [00:20<00:21,  7.76run/s][A
+Autoregressive MARE:  50%|████▉     | 164/331 [00:21<00:21,  7.76run/s][A
+Autoregressive MARE:  50%|████▉     | 165/331 [00:21<00:21,  7.77run/s][A
+Autoregressive MARE:  50%|█████     | 166/331 [00:21<00:21,  7.72run/s][A
+Autoregressive MARE:  50%|█████     | 167/331 [00:21<00:21,  7.73run/s][A
+Autoregressive MARE:  51%|█████     | 168/331 [00:21<00:21,  7.75run/s][A
+Autoregressive MARE:  51%|█████     | 169/331 [00:21<00:20,  7.74run/s][A
+Autoregressive MARE:  51%|█████▏    | 170/331 [00:21<00:20,  7.75run/s][A
+Autoregressive MARE:  52%|█████▏    | 171/331 [00:21<00:20,  7.75run/s][A
+Autoregressive MARE:  52%|█████▏    | 172/331 [00:22<00:20,  7.77run/s][A
+Autoregressive MARE:  52%|█████▏    | 173/331 [00:22<00:20,  7.76run/s][A
+Autoregressive MARE:  53%|█████▎    | 174/331 [00:22<00:20,  7.76run/s][A
+Autoregressive MARE:  53%|█████▎    | 175/331 [00:22<00:20,  7.76run/s][A
+Autoregressive MARE:  53%|█████▎    | 176/331 [00:22<00:19,  7.77run/s][A
+Autoregressive MARE:  53%|█████▎    | 177/331 [00:22<00:19,  7.77run/s][A
+Autoregressive MARE:  54%|█████▍    | 178/331 [00:22<00:19,  7.77run/s][A
+Autoregressive MARE:  54%|█████▍    | 179/331 [00:22<00:19,  7.77run/s][A
+Autoregressive MARE:  54%|█████▍    | 180/331 [00:23<00:19,  7.76run/s][A
+Autoregressive MARE:  55%|█████▍    | 181/331 [00:23<00:19,  7.77run/s][A
+Autoregressive MARE:  55%|█████▍    | 182/331 [00:23<00:19,  7.77run/s][A
+Autoregressive MARE:  55%|█████▌    | 183/331 [00:23<00:19,  7.76run/s][A
+Autoregressive MARE:  56%|█████▌    | 184/331 [00:23<00:18,  7.77run/s][A
+Autoregressive MARE:  56%|█████▌    | 185/331 [00:23<00:18,  7.76run/s][A
+Autoregressive MARE:  56%|█████▌    | 186/331 [00:23<00:18,  7.76run/s][A
+Autoregressive MARE:  56%|█████▋    | 187/331 [00:24<00:18,  7.77run/s][A
+Autoregressive MARE:  57%|█████▋    | 188/331 [00:24<00:18,  7.77run/s][A
+Autoregressive MARE:  57%|█████▋    | 189/331 [00:24<00:18,  7.76run/s][A
+Autoregressive MARE:  57%|█████▋    | 190/331 [00:24<00:18,  7.77run/s][A
+Autoregressive MARE:  58%|█████▊    | 191/331 [00:24<00:18,  7.76run/s][A
+Autoregressive MARE:  58%|█████▊    | 192/331 [00:24<00:17,  7.77run/s][A
+Autoregressive MARE:  58%|█████▊    | 193/331 [00:24<00:17,  7.78run/s][A
+Autoregressive MARE:  59%|█████▊    | 194/331 [00:24<00:17,  7.78run/s][A
+Autoregressive MARE:  59%|█████▉    | 195/331 [00:25<00:17,  7.77run/s][A
+Autoregressive MARE:  59%|█████▉    | 196/331 [00:25<00:17,  7.76run/s][A
+Autoregressive MARE:  60%|█████▉    | 197/331 [00:25<00:17,  7.77run/s][A
+Autoregressive MARE:  60%|█████▉    | 198/331 [00:25<00:17,  7.73run/s][A
+Autoregressive MARE:  60%|██████    | 199/331 [00:25<00:17,  7.74run/s][A
+Autoregressive MARE:  60%|██████    | 200/331 [00:25<00:16,  7.74run/s][A
+Autoregressive MARE:  61%|██████    | 201/331 [00:25<00:16,  7.76run/s][A
+Autoregressive MARE:  61%|██████    | 202/331 [00:25<00:16,  7.76run/s][A
+Autoregressive MARE:  61%|██████▏   | 203/331 [00:26<00:16,  7.76run/s][A
+Autoregressive MARE:  62%|██████▏   | 204/331 [00:26<00:16,  7.76run/s][A
+Autoregressive MARE:  62%|██████▏   | 205/331 [00:26<00:16,  7.75run/s][A
+Autoregressive MARE:  62%|██████▏   | 206/331 [00:26<00:16,  7.75run/s][A
+Autoregressive MARE:  63%|██████▎   | 207/331 [00:26<00:16,  7.75run/s][A
+Autoregressive MARE:  63%|██████▎   | 208/331 [00:26<00:15,  7.75run/s][A
+Autoregressive MARE:  63%|██████▎   | 209/331 [00:26<00:15,  7.75run/s][A
+Autoregressive MARE:  63%|██████▎   | 210/331 [00:26<00:15,  7.75run/s][A
+Autoregressive MARE:  64%|██████▎   | 211/331 [00:27<00:15,  7.76run/s][A
+Autoregressive MARE:  64%|██████▍   | 212/331 [00:27<00:15,  7.76run/s][A
+Autoregressive MARE:  64%|██████▍   | 213/331 [00:27<00:15,  7.75run/s][A
+Autoregressive MARE:  65%|██████▍   | 214/331 [00:27<00:15,  7.75run/s][A
+Autoregressive MARE:  65%|██████▍   | 215/331 [00:27<00:14,  7.75run/s][A
+Autoregressive MARE:  65%|██████▌   | 216/331 [00:27<00:14,  7.74run/s][A
+Autoregressive MARE:  66%|██████▌   | 217/331 [00:27<00:14,  7.75run/s][A
+Autoregressive MARE:  66%|██████▌   | 218/331 [00:28<00:14,  7.76run/s][A
+Autoregressive MARE:  66%|██████▌   | 219/331 [00:28<00:14,  7.76run/s][A
+Autoregressive MARE:  66%|██████▋   | 220/331 [00:28<00:14,  7.76run/s][A
+Autoregressive MARE:  67%|██████▋   | 221/331 [00:28<00:14,  7.76run/s][A
+Autoregressive MARE:  67%|██████▋   | 222/331 [00:28<00:14,  7.76run/s][A
+Autoregressive MARE:  67%|██████▋   | 223/331 [00:28<00:13,  7.76run/s][A
+Autoregressive MARE:  68%|██████▊   | 224/331 [00:28<00:13,  7.77run/s][A
+Autoregressive MARE:  68%|██████▊   | 225/331 [00:28<00:13,  7.76run/s][A
+Autoregressive MARE:  68%|██████▊   | 226/331 [00:29<00:13,  7.77run/s][A
+Autoregressive MARE:  69%|██████▊   | 227/331 [00:29<00:13,  7.76run/s][A
+Autoregressive MARE:  69%|██████▉   | 228/331 [00:29<00:13,  7.76run/s][A
+Autoregressive MARE:  69%|██████▉   | 229/331 [00:29<00:13,  7.76run/s][A
+Autoregressive MARE:  69%|██████▉   | 230/331 [00:29<00:13,  7.74run/s][A
+Autoregressive MARE:  70%|██████▉   | 231/331 [00:29<00:12,  7.74run/s][A
+Autoregressive MARE:  70%|███████   | 232/331 [00:29<00:12,  7.74run/s][A
+Autoregressive MARE:  70%|███████   | 233/331 [00:29<00:12,  7.76run/s][A
+Autoregressive MARE:  71%|███████   | 234/331 [00:30<00:12,  7.76run/s][A
+Autoregressive MARE:  71%|███████   | 235/331 [00:30<00:12,  7.76run/s][A
+Autoregressive MARE:  71%|███████▏  | 236/331 [00:30<00:12,  7.76run/s][A
+Autoregressive MARE:  72%|███████▏  | 237/331 [00:30<00:12,  7.77run/s][A
+Autoregressive MARE:  72%|███████▏  | 238/331 [00:30<00:11,  7.77run/s][A
+Autoregressive MARE:  72%|███████▏  | 239/331 [00:30<00:11,  7.77run/s][A
+Autoregressive MARE:  73%|███████▎  | 240/331 [00:30<00:11,  7.77run/s][A
+Autoregressive MARE:  73%|███████▎  | 241/331 [00:30<00:11,  7.77run/s][A
+Autoregressive MARE:  73%|███████▎  | 242/331 [00:31<00:11,  7.77run/s][A
+Autoregressive MARE:  73%|███████▎  | 243/331 [00:31<00:11,  7.77run/s][A
+Autoregressive MARE:  74%|███████▎  | 244/331 [00:31<00:11,  7.76run/s][A
+Autoregressive MARE:  74%|███████▍  | 245/331 [00:31<00:11,  7.76run/s][A
+Autoregressive MARE:  74%|███████▍  | 246/331 [00:31<00:10,  7.76run/s][A
+Autoregressive MARE:  75%|███████▍  | 247/331 [00:31<00:10,  7.76run/s][A
+Autoregressive MARE:  75%|███████▍  | 248/331 [00:31<00:10,  7.77run/s][A
+Autoregressive MARE:  75%|███████▌  | 249/331 [00:31<00:10,  7.77run/s][A
+Autoregressive MARE:  76%|███████▌  | 250/331 [00:32<00:10,  7.77run/s][A
+Autoregressive MARE:  76%|███████▌  | 251/331 [00:32<00:10,  7.76run/s][A
+Autoregressive MARE:  76%|███████▌  | 252/331 [00:32<00:10,  7.76run/s][A
+Autoregressive MARE:  76%|███████▋  | 253/331 [00:32<00:10,  7.75run/s][A
+Autoregressive MARE:  77%|███████▋  | 254/331 [00:32<00:09,  7.75run/s][A
+Autoregressive MARE:  77%|███████▋  | 255/331 [00:32<00:09,  7.74run/s][A
+Autoregressive MARE:  77%|███████▋  | 256/331 [00:32<00:09,  7.75run/s][A
+Autoregressive MARE:  78%|███████▊  | 257/331 [00:33<00:09,  7.75run/s][A
+Autoregressive MARE:  78%|███████▊  | 258/331 [00:33<00:09,  7.74run/s][A
+Autoregressive MARE:  78%|███████▊  | 259/331 [00:33<00:09,  7.75run/s][A
+Autoregressive MARE:  79%|███████▊  | 260/331 [00:33<00:09,  7.75run/s][A
+Autoregressive MARE:  79%|███████▉  | 261/331 [00:33<00:09,  7.75run/s][A
+Autoregressive MARE:  79%|███████▉  | 262/331 [00:33<00:08,  7.73run/s][A
+Autoregressive MARE:  79%|███████▉  | 263/331 [00:33<00:08,  7.74run/s][A
+Autoregressive MARE:  80%|███████▉  | 264/331 [00:33<00:08,  7.75run/s][A
+Autoregressive MARE:  80%|████████  | 265/331 [00:34<00:08,  7.75run/s][A
+Autoregressive MARE:  80%|████████  | 266/331 [00:34<00:08,  7.75run/s][A
+Autoregressive MARE:  81%|████████  | 267/331 [00:34<00:08,  7.75run/s][A
+Autoregressive MARE:  81%|████████  | 268/331 [00:34<00:08,  7.75run/s][A
+Autoregressive MARE:  81%|████████▏ | 269/331 [00:34<00:08,  7.75run/s][A
+Autoregressive MARE:  82%|████████▏ | 270/331 [00:34<00:07,  7.75run/s][A
+Autoregressive MARE:  82%|████████▏ | 271/331 [00:34<00:07,  7.75run/s][A
+Autoregressive MARE:  82%|████████▏ | 272/331 [00:34<00:07,  7.74run/s][A
+Autoregressive MARE:  82%|████████▏ | 273/331 [00:35<00:07,  7.75run/s][A
+Autoregressive MARE:  83%|████████▎ | 274/331 [00:35<00:07,  7.75run/s][A
+Autoregressive MARE:  83%|████████▎ | 275/331 [00:35<00:07,  7.75run/s][A
+Autoregressive MARE:  83%|████████▎ | 276/331 [00:35<00:07,  7.76run/s][A
+Autoregressive MARE:  84%|████████▎ | 277/331 [00:35<00:06,  7.76run/s][A
+Autoregressive MARE:  84%|████████▍ | 278/331 [00:35<00:06,  7.76run/s][A
+Autoregressive MARE:  84%|████████▍ | 279/331 [00:35<00:06,  7.76run/s][A
+Autoregressive MARE:  85%|████████▍ | 280/331 [00:35<00:06,  7.76run/s][A
+Autoregressive MARE:  85%|████████▍ | 281/331 [00:36<00:06,  7.76run/s][A
+Autoregressive MARE:  85%|████████▌ | 282/331 [00:36<00:06,  7.76run/s][A
+Autoregressive MARE:  85%|████████▌ | 283/331 [00:36<00:06,  7.76run/s][A
+Autoregressive MARE:  86%|████████▌ | 284/331 [00:36<00:06,  7.76run/s][A
+Autoregressive MARE:  86%|████████▌ | 285/331 [00:36<00:05,  7.77run/s][A
+Autoregressive MARE:  86%|████████▋ | 286/331 [00:36<00:05,  7.76run/s][A
+Autoregressive MARE:  87%|████████▋ | 287/331 [00:36<00:05,  7.76run/s][A
+Autoregressive MARE:  87%|████████▋ | 288/331 [00:37<00:05,  7.74run/s][A
+Autoregressive MARE:  87%|████████▋ | 289/331 [00:37<00:05,  7.74run/s][A
+Autoregressive MARE:  88%|████████▊ | 290/331 [00:37<00:05,  7.74run/s][A
+Autoregressive MARE:  88%|████████▊ | 291/331 [00:37<00:05,  7.74run/s][A
+Autoregressive MARE:  88%|████████▊ | 292/331 [00:37<00:05,  7.74run/s][A
+Autoregressive MARE:  89%|████████▊ | 293/331 [00:37<00:04,  7.74run/s][A
+Autoregressive MARE:  89%|████████▉ | 294/331 [00:37<00:04,  7.69run/s][A
+Autoregressive MARE:  89%|████████▉ | 295/331 [00:37<00:04,  7.71run/s][A
+Autoregressive MARE:  89%|████████▉ | 296/331 [00:38<00:04,  7.71run/s][A
+Autoregressive MARE:  90%|████████▉ | 297/331 [00:38<00:04,  7.72run/s][A
+Autoregressive MARE:  90%|█████████ | 298/331 [00:38<00:04,  7.73run/s][A
+Autoregressive MARE:  90%|█████████ | 299/331 [00:38<00:04,  7.73run/s][A
+Autoregressive MARE:  91%|█████████ | 300/331 [00:38<00:04,  7.73run/s][A
+Autoregressive MARE:  91%|█████████ | 301/331 [00:38<00:03,  7.75run/s][A
+Autoregressive MARE:  91%|█████████ | 302/331 [00:38<00:03,  7.76run/s][A
+Autoregressive MARE:  92%|█████████▏| 303/331 [00:38<00:03,  7.76run/s][A
+Autoregressive MARE:  92%|█████████▏| 304/331 [00:39<00:03,  7.76run/s][A
+Autoregressive MARE:  92%|█████████▏| 305/331 [00:39<00:03,  7.76run/s][A
+Autoregressive MARE:  92%|█████████▏| 306/331 [00:39<00:03,  7.75run/s][A
+Autoregressive MARE:  93%|█████████▎| 307/331 [00:39<00:03,  7.75run/s][A
+Autoregressive MARE:  93%|█████████▎| 308/331 [00:39<00:02,  7.76run/s][A
+Autoregressive MARE:  93%|█████████▎| 309/331 [00:39<00:02,  7.75run/s][A
+Autoregressive MARE:  94%|█████████▎| 310/331 [00:39<00:02,  7.76run/s][A
+Autoregressive MARE:  94%|█████████▍| 311/331 [00:40<00:02,  7.74run/s][A
+Autoregressive MARE:  94%|█████████▍| 312/331 [00:40<00:02,  7.75run/s][A
+Autoregressive MARE:  95%|█████████▍| 313/331 [00:40<00:02,  7.75run/s][A
+Autoregressive MARE:  95%|█████████▍| 314/331 [00:40<00:02,  7.75run/s][A
+Autoregressive MARE:  95%|█████████▌| 315/331 [00:40<00:02,  7.75run/s][A
+Autoregressive MARE:  95%|█████████▌| 316/331 [00:40<00:01,  7.76run/s][A
+Autoregressive MARE:  96%|█████████▌| 317/331 [00:40<00:01,  7.76run/s][A
+Autoregressive MARE:  96%|█████████▌| 318/331 [00:40<00:01,  7.76run/s][A
+Autoregressive MARE:  96%|█████████▋| 319/331 [00:41<00:01,  7.76run/s][A
+Autoregressive MARE:  97%|█████████▋| 320/331 [00:41<00:01,  7.76run/s][A
+Autoregressive MARE:  97%|█████████▋| 321/331 [00:41<00:01,  7.76run/s][A
+Autoregressive MARE:  97%|█████████▋| 322/331 [00:41<00:01,  7.76run/s][A
+Autoregressive MARE:  98%|█████████▊| 323/331 [00:41<00:01,  7.76run/s][A
+Autoregressive MARE:  98%|█████████▊| 324/331 [00:41<00:00,  7.75run/s][A
+Autoregressive MARE:  98%|█████████▊| 325/331 [00:41<00:00,  7.75run/s][A
+Autoregressive MARE:  98%|█████████▊| 326/331 [00:41<00:00,  7.75run/s][A
+Autoregressive MARE:  99%|█████████▉| 327/331 [00:42<00:00,  7.75run/s][A
+Autoregressive MARE:  99%|█████████▉| 328/331 [00:42<00:00,  7.75run/s][A
+Autoregressive MARE:  99%|█████████▉| 329/331 [00:42<00:00,  7.75run/s][A
+Autoregressive MARE: 100%|█████████▉| 330/331 [00:42<00:00,  7.75run/s][A
+Autoregressive MARE: 100%|██████████| 331/331 [00:42<00:00,  7.75run/s][AAutoregressive MARE: 100%|██████████| 331/331 [00:42<00:00,  7.77run/s]
+2025-11-17 18:08:13.264 | INFO     | ML.utils.metrics:model_autoregress:255 - Collected predictions for targets: ['U235']
+2025-11-17 18:08:13.522 | INFO     | ML.models.DNN_Model:_compute_mare_comparison:355 - 
+U235:
+2025-11-17 18:08:13.522 | INFO     | ML.models.DNN_Model:_compute_mare_comparison:356 -   MARE (Teacher-Forcing): 0.006250
+2025-11-17 18:08:13.522 | INFO     | ML.models.DNN_Model:_compute_mare_comparison:357 -   MARE (Autoregressive):  0.005015
+2025-11-17 18:08:13.525 | INFO     | ML.models.DNN_Model:_compute_feature_importance:371 - 
+====================
+2025-11-17 18:08:13.525 | INFO     | ML.models.DNN_Model:_compute_feature_importance:372 - FEATURE IMPORTANCE ANALYSIS
+2025-11-17 18:08:13.525 | INFO     | ML.models.DNN_Model:_compute_feature_importance:373 - ====================
+2025-11-17 18:08:13.525 | INFO     | ML.models.DNN_Model:_compute_feature_importance:381 - 
+Computing feature importance for: U235
+2025-11-17 18:08:13.525 | INFO     | ML.models.DNN_Model:_compute_and_plot_importance:402 -   Computing r2_score-based feature importance...
+2025-11-17 18:08:13.977 | INFO     | ML.utils.metrics:calculate_feature_importance:118 - Calculating Feature Importances for output 0 using r2 (increasing is better)
+2025-11-17 18:08:14.464 | INFO     | ML.utils.plot:plot_feature_importance:237 - r2_score Importances plot saved to: results/run_1/U235/r2_score_importance.png
+2025-11-17 18:08:14.464 | INFO     | ML.models.DNN_Model:_compute_and_plot_importance:402 -   Computing mse_score-based feature importance...
+2025-11-17 18:08:14.713 | INFO     | ML.utils.metrics:calculate_feature_importance:118 - Calculating Feature Importances for output 0 using mse (decreasing is better)
+2025-11-17 18:08:15.132 | INFO     | ML.utils.plot:plot_feature_importance:237 - mse_score Importances plot saved to: results/run_1/U235/mse_score_importance.png
+2025-11-17 18:08:15.132 | INFO     | ML.models.DNN_Model:_compute_feature_importance:397 -   ✓ Feature importance plots saved to: results/run_1/U235
+2025-11-17 18:08:15.166 | INFO     | ML.models.DNN_Model:_plot_prediction_comparisons:416 - 
+====================
+2025-11-17 18:08:15.166 | INFO     | ML.models.DNN_Model:_plot_prediction_comparisons:417 - PREDICTION COMPARISON (Teacher-Forcing vs Autoregressive)
+2025-11-17 18:08:15.166 | INFO     | ML.models.DNN_Model:_plot_prediction_comparisons:418 - ====================
+2025-11-17 18:08:15.166 | INFO     | ML.models.DNN_Model:_plot_prediction_comparisons:423 - 
+Plotting prediction comparison for: U235
+2025-11-17 18:08:15.769 | INFO     | ML.models.DNN_Model:_plot_prediction_comparisons:470 -   ✓ Comparison plot saved to: results/run_1/U235
+Traceback (most recent call last):
+  File "/net/scratch/u97798ac/Nuclear_Transport_With_ML/ML/sweep_train.py", line 64, in <module>
+    modes.train_and_test(datamodule, DNN_Model.DNN_Model, cfg)
+  File "/net/scratch/u97798ac/Nuclear_Transport_With_ML/ML/models/modes.py", line 66, in train_and_test
+    trainer.test(model=model, datamodule=datamodule, ckpt_path=best_model_path)
+  File "/mnt/iusers01/fse-ugpgt01/phy01/u97798ac/.local/lib/python3.9/site-packages/lightning/pytorch/trainer/trainer.py", line 774, in test
+    return call._call_and_handle_interrupt(
+  File "/mnt/iusers01/fse-ugpgt01/phy01/u97798ac/.local/lib/python3.9/site-packages/lightning/pytorch/trainer/call.py", line 49, in _call_and_handle_interrupt
+    return trainer_fn(*args, **kwargs)
+  File "/mnt/iusers01/fse-ugpgt01/phy01/u97798ac/.local/lib/python3.9/site-packages/lightning/pytorch/trainer/trainer.py", line 816, in _test_impl
+    results = self._run(model, ckpt_path=ckpt_path)
+  File "/mnt/iusers01/fse-ugpgt01/phy01/u97798ac/.local/lib/python3.9/site-packages/lightning/pytorch/trainer/trainer.py", line 1011, in _run
+    results = self._run_stage()
+  File "/mnt/iusers01/fse-ugpgt01/phy01/u97798ac/.local/lib/python3.9/site-packages/lightning/pytorch/trainer/trainer.py", line 1048, in _run_stage
+    return self._evaluation_loop.run()
+  File "/mnt/iusers01/fse-ugpgt01/phy01/u97798ac/.local/lib/python3.9/site-packages/lightning/pytorch/loops/utilities.py", line 179, in _decorator
+    return loop_run(self, *args, **kwargs)
+  File "/mnt/iusers01/fse-ugpgt01/phy01/u97798ac/.local/lib/python3.9/site-packages/lightning/pytorch/loops/evaluation_loop.py", line 152, in run
+    return self.on_run_end()
+  File "/mnt/iusers01/fse-ugpgt01/phy01/u97798ac/.local/lib/python3.9/site-packages/lightning/pytorch/loops/evaluation_loop.py", line 295, in on_run_end
+    self._on_evaluation_epoch_end()
+  File "/mnt/iusers01/fse-ugpgt01/phy01/u97798ac/.local/lib/python3.9/site-packages/lightning/pytorch/loops/evaluation_loop.py", line 375, in _on_evaluation_epoch_end
+    call._call_lightning_module_hook(trainer, hook_name)
+  File "/mnt/iusers01/fse-ugpgt01/phy01/u97798ac/.local/lib/python3.9/site-packages/lightning/pytorch/trainer/call.py", line 177, in _call_lightning_module_hook
+    output = fn(*args, **kwargs)
+  File "/net/scratch/u97798ac/Nuclear_Transport_With_ML/ML/models/DNN_Model.py", line 181, in on_test_epoch_end
+    self.trainer.logger.update_final_results(
+  File "/mnt/iusers01/fse-ugpgt01/phy01/u97798ac/.local/lib/python3.9/site-packages/lightning_utilities/core/rank_zero.py", line 41, in wrapped_fn
+    return fn(*args, **kwargs)
+  File "/net/scratch/u97798ac/Nuclear_Transport_With_ML/ML/utils/sql_lite_logger.py", line 271, in update_final_results
+    log.info(f"✓ Updated final results for experiment {self._experiment_id}")
+NameError: name 'log' is not defined
