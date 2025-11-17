@@ -90,9 +90,18 @@ class DNN_Model(L.LightningModule):
     loss = self.loss_fn(y_hat, y)
     self.log("val_loss", loss, prog_bar=True, on_epoch=True)
     
-    # Update metrics
-    self.val_r2.update(y_hat, y)
-    self.val_mae.update(y_hat, y)  # Add this
+    # Unscale predictions and targets for fair R² comparison
+    target_scaler = self.trainer.datamodule.target_scaler
+    y_unscaled = data_scaler.inverse_transformer(target_scaler, y.cpu().numpy())
+    y_hat_unscaled = data_scaler.inverse_transformer(target_scaler, y_hat.detach().cpu().numpy())
+    
+    # Convert back to tensors
+    y_unscaled_t = torch.from_numpy(y_unscaled).to(y.device)
+    y_hat_unscaled_t = torch.from_numpy(y_hat_unscaled).to(y_hat.device)
+    
+    # Update metrics on UNSCALED data
+    self.val_r2.update(y_hat_unscaled_t, y_unscaled_t)
+    self.val_mae.update(y_hat_unscaled_t, y_unscaled_t)
     
     return loss
 
@@ -498,7 +507,7 @@ class DNN_Model(L.LightningModule):
         logger.info(f"  ✓ Comparison plot saved to: {output_dir}")
 
 
-def _init_tracking_variables(self):
+  def _init_tracking_variables(self):
     """Initialize lists for tracking losses and test results."""
     self.train_losses = []
     self.val_losses = []

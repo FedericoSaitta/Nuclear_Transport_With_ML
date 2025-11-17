@@ -31,7 +31,7 @@ model:
   dropout_probability: 0.1
   activation: "gelu"  # Options: relu, tanh, sigmoid, leaky_relu, elu, gelu
   output_activation: "none"  # Options: none, sigmoid, tanh, softplus
-  residual_connections: True
+  residual_connections: False
 
 train:
   loss: "mse"

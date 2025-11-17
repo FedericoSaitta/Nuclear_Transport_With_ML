@@ -18,7 +18,6 @@ sweep_space = {
 
     ("model", "layers"): [[64, 64], [128, 64], [64, 32, 64],],
     ("model", "activation"): ["relu", "gelu", "tanh"],
-    ("model", "residual_connections"): [True, False],
     
     ("train", "loss"): ["mse", "mae", "huber", "smooth_l1"],
 }

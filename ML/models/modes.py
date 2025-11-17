@@ -72,7 +72,7 @@ def train_and_test(datamodule, model, cfg):
   return {
       "val_r2": float(val_r2),
       "val_loss": float(val_loss),
-      "val_mae": float(val_mae),  # Add this
+      "val_mae": float(val_mae),
   }
 
 def train_from_checkpoint_and_test(datamodule, model_class, cfg):

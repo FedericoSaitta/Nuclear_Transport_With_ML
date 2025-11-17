@@ -79,6 +79,17 @@ class OptunaObjective:
         }
         cfg.model.layers = layer_map[layer_config]
 
+        # Dropout
+        dropout = trial.suggest_float("dropout", 0.0, 0.3, step=0.05)
+        cfg.model.dropout_probability = dropout
+
+        # Activation function
+        activation = trial.suggest_categorical(
+            "activation", 
+            ["relu", "gelu", "tanh", "elu"]
+        )
+        cfg.model.activation = activation
+
         # Only suggest residual if architecture supports it
         supports_residual = layer_config in ["64_64", "128_128"]
         if supports_residual:
@@ -128,28 +139,31 @@ class OptunaObjective:
             datamodule = DNN_Datamodule.DNN_Datamodule(cfg)
             
             # Train and get results
-            # You may need to modify modes.train_and_test to return metrics
             results = modes.train_and_test(datamodule, DNN_Model.DNN_Model, cfg)
             
-            # Extract R² metric (scale-independent, works with any loss function)
-            # R² ranges from -inf to 1, where 1 is perfect
+            # Extract R² metric
             if isinstance(results, dict):
                 val_r2 = results.get("val_r2", -float("inf"))
             elif hasattr(results, "val_r2"):
                 val_r2 = results.val_r2
             else:
-                # If train_and_test doesn't return R² metric
                 print(f"Warning: Could not extract R² metric for trial {trial.number}")
-                print(f"Make sure your train_and_test() returns a dict with 'val_r2' key")
                 val_r2 = -float("inf")
             
-            # Return R² directly (we'll maximize it)
-            return val_r2
+            # Transform R² to amplify differences near 1
+            # 0.99992 → ~4.1, 0.9999 → ~4.0, 0.999 → ~3.0
+            if val_r2 > 0:
+                transformed = -math.log10(1 - val_r2 + 1e-12)
+            else:
+                transformed = val_r2  # Keep negative R² as-is
+            
+            print(f"Trial {trial.number}: R² = {val_r2:.6f}, transformed = {transformed:.4f}")
+            return transformed
             
         except Exception as e:
-            # Handle training failures gracefully
+            import traceback
             print(f"Trial {trial.number} failed with error: {e}")
-            # Return a very poor R² to mark this trial as bad
+            traceback.print_exc()
             return -float("inf")
 
 
@@ -157,7 +171,7 @@ def run_optuna_study(
     base_config: str = "base_simple_U235.yaml",
     study_name: str = "U235_hyperparameter_optimization",
     storage: str = "sqlite:///optuna_U235.db",
-    n_trials: int = 500,
+    n_trials: int = 100,
     n_jobs: int = 1,
     timeout: int = None,
     load_if_exists: bool = True,
@@ -216,8 +230,16 @@ def run_optuna_study(
     print("Optimization finished!")
     print("=" * 80)
     
+    # Convert back from transformed value to actual R²
+    best_transformed = study.best_trial.value
+    if best_transformed > 0:
+        best_r2 = 1 - 10**(-best_transformed)
+    else:
+        best_r2 = best_transformed
+    
     print(f"\nBest trial: {study.best_trial.number}")
-    print(f"Best value (R²): {study.best_trial.value:.6f}")
+    print(f"Best R²: {best_r2:.6f}")
+    print(f"Best transformed value: {best_transformed:.4f}")
     print("\nBest hyperparameters:")
     for key, value in study.best_trial.params.items():
         print(f"  {key}: {value}")
@@ -231,7 +253,7 @@ def run_optuna_study(
     # Apply best parameters
     cfg.dataset.inputs.U235 = study.best_trial.params["u235_input_scaling"]
     cfg.dataset.targets.U235 = study.best_trial.params["u235_target_scaling"]
-    
+
     layer_map = {
         "64_64": [64, 64],
         "128_64": [128, 64],
@@ -242,7 +264,10 @@ def run_optuna_study(
     cfg.model.layers = layer_map[study.best_trial.params["layers"]]
     cfg.model.dropout_probability = study.best_trial.params["dropout"]
     cfg.model.activation = study.best_trial.params["activation"]
-    cfg.model.residual_connections = study.best_trial.params["residual_connections"]
+
+    # Handle conditional residual_connections
+    cfg.model.residual_connections = study.best_trial.params.get("residual_connections", False)
+
     cfg.train.loss = study.best_trial.params["loss"]
     cfg.train.learning_rate = study.best_trial.params["learning_rate"]
     cfg.train.weight_decay = study.best_trial.params["weight_decay"]
@@ -270,7 +295,7 @@ if __name__ == "__main__":
         base_config="base_simple_U235.yaml",
         study_name="U235_DNN_optimization",
         storage="sqlite:///optuna_U235_study.db",
-        n_trials=100,  # Adjust based on computational budget
+        n_trials=300,  # Adjust based on computational budget
         n_jobs=1,      # Keep at 1 to avoid GPU conflicts
         timeout=None,  # No time limit
     )
