@@ -1,69 +1,65 @@
 # sweep_train.py
 
 from omegaconf import OmegaConf
-import torch
+#import torch
 
 # Personal imports (same as your main)
-import ML.datamodule.DNN_Datamodule as DNN_Datamodule
-import ML.models.DNN_Model as DNN_Model
-import ML.models.modes as modes
+#import ML.datamodule.DNN_Datamodule as DNN_Datamodule
+#import ML.models.DNN_Model as DNN_Model
+#import ML.models.modes as modes
 
 from sweeper import ConfigSweeper
+from sweeper import ConfigPathForSweeper
+from sweeper import generate_permutations
 
+sweep_space = {
+
+    ("dataset", "inputs", "U235"): ["MinMax", "robust", "standard", "quantile","log"],
+    ("dataset", "targets", "U235"): ["MinMax", "robust", "standard", "quantile","log"],
+
+
+    ("model", "layers"): [
+        [64, 64],
+        [128, 64],
+        [64, 32, 64],
+    ],
+    ("model", "activation"): ["relu", "gelu", "tanh"],
+    
+    
+    ("train", "loss"): ["mse", "mae", "huber", "smooth_l1"],
+}
+#model = ConfigSweeper("ML/base_simple_U235.yaml") 
+#for combo in generate_permutations(sweep_space):
+#    print(combo)
+
+ 
 
 if __name__ == "__main__":
-    # Allow use of tensor cores if present
     torch.set_float32_matmul_precision("high")
 
     # This object holds the base config and the helpers:
-    model = ConfigSweeper("test_config.yaml")  # you can call it 'model' if you like
-
-    # ----- define your search space -----
-    layer_grid = [
-        [64, 64],
-        [128, 64],
-        [128, 128, 64],
-    ]
-
-    input_scaling_grid = ["MinMax", "robust"]
-    train_batch_grid = [512, 1024]
-    val_batch_grid = [4096, 8192]
-
-    # Example: ensure all targets use robust scaling
-    # (you can also sweep this if you want)
-    # model.set_scaling("targets", "robust")   # per-run inside the loop if you want
+    model = ConfigSweeper("ML/base_simple_U235.yaml")  
 
     run_id = 0
 
-    for layers in layer_grid:
-        for input_scaling in input_scaling_grid:
-            for train_bs in train_batch_grid:
-                for val_bs in val_batch_grid:
-                    run_id += 1
+    for combo in generate_permutations(sweep_space):
+        run_id += 1
 
-                    # ---- reset to the original config for each run ----
-                    model.reset()
+        # start from clean base YAML each time
+        model.reset()
+        cfg: DictConfig = model.get_cfg()
 
-                    # ---- apply modifications for this run ----
-                    model.set_layers(layers)
-                    model.set_scaling("inputs", input_scaling)
-                    model.set_scaling("targets", "robust")  # fixed here, but could be a grid too
-                    model.set_batch_sizes(train_bs, val_bs)
+        # apply all chosen values for this permutation
+        for path, value in combo.items():
+            set_cfg_value(cfg, path, value)
 
-                    # Example of adding or overriding a single input:
-                    # model.add_input("time_days", input_scaling)
-                    # model.add_input("U235", "robust")
+        # make sure we are in train mode
+        cfg.runtime.mode = "train"
 
-                    cfg = model.get_cfg()
-                    cfg.runtime.mode = "train"  # force train mode
+        # optional: encode hyperparams in model name for logging
+        cfg.model.name = f"run_{run_id}"
 
-                    # Optional: adjust model name to encode the setup
-                    cfg.model.name = (
-                        f"layers_{'-'.join(map(str, layers))}"
-                        f"_in_{input_scaling}_bs_{train_bs}_{val_bs}_run_{run_id}"
-                    )
-
-                    datamodule = DNN_Datamodule.DNN_Datamodule(cfg)
-                    modes.train_and_test(datamodule, DNN_Model.DNN_Model, cfg)
-
-                    # You can inspect logs/checkpoints later using cfg.model.name
+        # build datamodule + train
+        datamodule = DNN_Datamodule.DNN_Datamodule(cfg)
+        modes.train_and_test(datamodule, DNN_Model.DNN_Model, cfg)
+        

@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List, Union, Iterable, Tuple
 
 from omegaconf import OmegaConf, DictConfig
 
+from itertools import product
 
 class ConfigSweeper:
     """
@@ -55,122 +56,42 @@ class ConfigSweeper:
         """
         return self.cfg
 
-    # ---------- model helpers ----------
+# sweeper helpers for the dict generation
 
-    def set_layers(self, layers: List[int]) -> None:
-        """
-        Set the list of hidden layer sizes under model.layers.
-        Example: [64, 64] or [128, 64, 32]
-        """
-        if "model" not in self.cfg:
-            self.cfg.model = {}
-        self.cfg.model.layers = list(layers)
+ConfigPathForSweeper = Tuple[str, ...]  # e.g. ("dataset", "inputs", "U235")
 
-    # ---------- dataset feature / scaling helpers ----------
+def generate_permutations(
+    sweep_space: Dict[Path, List[Any]]
+) -> Iterable[Dict[Path, Any]]:
+    """
+    Given a mapping:
+        (path_tuple) -> [list, of, options]
+    yield dictionaries mapping each path_tuple to one chosen value.
 
-    def _ensure_dataset_section(self) -> None:
-        if "dataset" not in self.cfg or self.cfg.dataset is None:
-            self.cfg.dataset = {}
+    Example:
+      {
+        ("model", "activation"): ["relu", "gelu"],
+        ("train", "loss"): ["mse", "mae"],
+      }
 
-    def _get_feature_dict(self, section: str) -> Dict[str, str]:
-        """
-        Get cfg.dataset.inputs or cfg.dataset.targets as a plain dict-like.
+      => 4 combinations total.
+    """
+    paths = list(sweep_space.keys())
+    value_lists = [sweep_space[p] for p in paths]
 
-        section: "inputs" or "targets"
-        """
-        if section not in ("inputs", "targets"):
-            raise ValueError("section must be 'inputs' or 'targets'.")
+    for combo in product(*value_lists):
+        yield {path: value for path, value in zip(paths, combo)}
 
-        self._ensure_dataset_section()
 
-        if section not in self.cfg.dataset or self.cfg.dataset[section] is None:
-            self.cfg.dataset[section] = {}
-
-        feature_dict = self.cfg.dataset[section]
-
-        if not isinstance(feature_dict, dict):
-            # OmegaConf sometimes uses DictConfig, but dict-like is fine
-            feature_dict = dict(feature_dict)
-            self.cfg.dataset[section] = feature_dict
-
-        return feature_dict
-
-    def set_scaling(self, section: str, scaling: str) -> None:
-        """
-        Set scaling for ALL features in dataset.inputs or dataset.targets.
-
-        Example:
-            model.set_scaling("inputs", "MinMax")
-            model.set_scaling("targets", "robust")
-        """
-        feature_dict = self._get_feature_dict(section)
-        for key in list(feature_dict.keys()):
-            feature_dict[key] = scaling
-
-    def add_input(self, input_name: str, scaling: str) -> None:
-        """
-        Add or update a single input feature in dataset.inputs.
-
-        If it exists, scaling is UPDATED.
-        Example:
-            model.add_input("time_days", "MinMax")
-        """
-        inputs = self._get_feature_dict("inputs")
-        inputs[input_name] = scaling
-
-    def add_target(self, target_name: str, scaling: str) -> None:
-        """
-        Add or update a single target feature in dataset.targets.
-        """
-        targets = self._get_feature_dict("targets")
-        targets[target_name] = scaling
-
-    def set_feature_scaling(
-        self,
-        section: str,
-        feature_name: str,
-        scaling: str,
-        create_if_missing: bool = True,
-    ) -> None:
-        """
-        Explicitly set scaling for a single feature in inputs/targets.
-
-        section: 'inputs' or 'targets'
-        feature_name: name of the feature
-        scaling: e.g. 'MinMax', 'robust'
-        """
-        feature_dict = self._get_feature_dict(section)
-        if feature_name not in feature_dict and not create_if_missing:
-            raise KeyError(
-                f"{feature_name!r} not found in dataset.{section} "
-                f"and create_if_missing=False."
-            )
-        feature_dict[feature_name] = scaling
-
-    # ---------- batch size helpers ----------
-
-    def set_batch_size(self, split: str, batch_size: int) -> None:
-        """
-        Set batch_size under dataset.train or dataset.val.
-
-        split: 'train' or 'val'
-        """
-        self._ensure_dataset_section()
-
-        if split not in ("train", "val"):
-            raise ValueError("split must be 'train' or 'val'.")
-
-        if split not in self.cfg.dataset or self.cfg.dataset[split] is None:
-            self.cfg.dataset[split] = {}
-
-        if not isinstance(self.cfg.dataset[split], dict):
-            self.cfg.dataset[split] = dict(self.cfg.dataset[split])
-
-        self.cfg.dataset[split]["batch_size"] = int(batch_size)
-
-    def set_batch_sizes(self, train_batch: int, val_batch: int) -> None:
-        """
-        Convenience: set both train and val batch sizes.
-        """
-        self.set_batch_size("train", train_batch)
-        self.set_batch_size("val", val_batch)
+def set_cfg_value(cfg: DictConfig, path: Path, value: Any) -> None:
+    """
+    Set cfg[path[0]][path[1]]...[path[-1]] = value,
+    creating intermediate dicts if needed.
+    """
+    node = cfg
+    *parents, last = path
+    for key in parents:
+        if key not in node or node[key] is None:
+            node[key] = {}
+        node = node[key]
+    node[last] = value
