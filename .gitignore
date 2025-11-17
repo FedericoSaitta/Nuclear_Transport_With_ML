@@ -18,3 +18,5 @@ Makefile
 *.db
 *.egg-info
 *.vs
+*.sh
+*.ckpt

@@ -36,12 +36,10 @@ model:
 train:
   loss: "mse"
   learning_rate: 5.0e-5
-  weight_decay: 5.0e-4
+  weight_decay: 1.0e-4
   lr_scheduler_patience: 10
-  num_epochs: 500
+  num_epochs: 1_000
   early_stopping_patience: 20
-
-  dropout_probability: 0.1   
 
 runtime:
   mode: "train"    # Options: train, train_from_ckp

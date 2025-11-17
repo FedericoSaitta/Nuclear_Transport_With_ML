@@ -23,7 +23,7 @@ class DNN_Model(L.LightningModule):
     # Model architecture
     self.n_inputs = len(config_object.dataset.inputs)
     self.n_outputs = len(config_object.dataset.targets)
-    self.dropout_prob = config_object.train.dropout_probability
+    self.dropout_prob = config_object.model.dropout_probability
     self.NN_layers = config_object.model.layers
     self.activation = config_object.model.activation
     self.output_activation = config_object.model.output_activation

@@ -13,26 +13,16 @@ from sweeper import ConfigPathForSweeper
 from sweeper import generate_permutations, set_cfg_value
 
 sweep_space = {
-
     ("dataset", "inputs", "U235"): ["MinMax", "robust", "standard", "quantile","log"],
     ("dataset", "targets", "U235"): ["MinMax", "robust", "standard", "quantile","log"],
 
-
-    ("model", "layers"): [
-        [64, 64],
-        [128, 64],
-        [64, 32, 64],
-    ],
+    ("model", "layers"): [[64, 64], [128, 64], [64, 32, 64],],
     ("model", "activation"): ["relu", "gelu", "tanh"],
+    ("model", "residual_connections"): [True, False],
     
-    
-    ("train", "loss"): ["mse", "mae"],
+    ("train", "loss"): ["mse", "mae", "huber", "smooth_l1"],
 }
-#model = ConfigSweeper("ML/base_simple_U235.yaml") 
-#for combo in generate_permutations(sweep_space):
-#    print(combo)
 
- 
 
 if __name__ == "__main__":
     torch.set_float32_matmul_precision("high")

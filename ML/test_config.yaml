@@ -44,8 +44,6 @@ train:
   num_epochs: 500
   early_stopping_patience: 20
 
-  dropout_probability: 0.1   
-
 runtime:
   mode: "train"    # Options: train, train_from_ckp
   ckp_path: 'results/SimpleDNN/best-SimpleDNN-epoch=397.ckpt'

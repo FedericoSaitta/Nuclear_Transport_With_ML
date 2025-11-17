@@ -268,7 +268,7 @@ class SQLiteLogger(Logger):
     
     conn.commit()
     conn.close()
-    log.info(f"✓ Updated final results for experiment {self._experiment_id}")
+    logger.info(f"✓ Updated final results for experiment {self._experiment_id}")
   
   def save(self):
     pass
