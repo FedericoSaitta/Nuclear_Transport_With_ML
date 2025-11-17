@@ -4,7 +4,7 @@ import numpy as np
 
 # Read the CSV
 print("Reading CSV...")
-df = pl.read_csv("cleaned.csv")
+df = pl.read_csv("data.csv")
 
 # Remove run_label column if it exists
 if "run_label" in df.columns:

@@ -1,3 +1,4 @@
+
 from loguru import logger
 import lightning as L
 from torch.utils.data import DataLoader
@@ -35,8 +36,9 @@ class DNN_Datamodule(L.LightningDataModule):
     self._has_setup = True
 
     logger.info("Setting up the data module...")
-
-    data_df, self.run_length = data_help.read_data(self.path_to_data, self.fraction_of_data, drop_run_label=True)
+    
+    # Obtain the df, the run length and the actualy time data such that we can plot
+    data_df, self.run_length, self.time_array = data_help.read_data(self.path_to_data, self.fraction_of_data, drop_run_label=True)
     data_help.print_dataset_stats(data_df)
 
     # Preserve order: inputs first, then targets (no duplicates)
@@ -53,7 +55,7 @@ class DNN_Datamodule(L.LightningDataModule):
     self.input_scaler = data_scalers.create_column_transformer(self.inputs, self.col_index_map)
     self.target_scaler = data_scalers.create_column_transformer(self.target, self.target_index_map)
 
-    X, Y = data_help.create_timeseries_targets(self.input_data_arr, self.target_data_arr, self.col_index_map['time_days'], 
+    X, Y = data_help.create_timeseries_targets(self.input_data_arr, self.target_data_arr, self.time_array, 
                                                self.col_index_map, self.target_index_map, self.delta_conc)
 
     # Split data 80/10/10 -- Train/validation/Test, this is Time aware

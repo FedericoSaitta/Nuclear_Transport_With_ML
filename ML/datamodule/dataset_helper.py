@@ -120,8 +120,9 @@ def read_data(file_path, fraction_of_data, drop_run_label=True):
     runs_kept = int(fraction_of_data * total_runs)  # Find the closest integer run number
     df = df.slice(0, runs_kept * run_length)
     logger.info(f"Cutting Down Dataset to {fraction_of_data*100}%, runs present: {runs_kept}")
+  time_array = df['time_days'].to_numpy()
 
-  return df, run_length
+  return df, run_length, time_array
 
 
 def print_dataset_stats(df):
@@ -157,10 +158,7 @@ def split_df(df, input_keys):
   return data_array, col_index_map
 
 
-def create_timeseries_targets(input_data, target_data, time_col_idx, input_col_map, target_elements, delta_conc):
-  if time_col_idx is None: 
-    raise ValueError("No time column found")
-  
+def create_timeseries_targets(input_data, target_data, time_values, input_col_map, target_elements, delta_conc):
   # Validate target elements exist
   for element in target_elements:
     if element not in input_col_map: 
@@ -169,7 +167,6 @@ def create_timeseries_targets(input_data, target_data, time_col_idx, input_col_m
   logger.info(input_col_map)
   
   # Find run boundaries (where time resets) using input_data
-  time_values = input_data[:, time_col_idx]
   run_end_indices = []
   
   for i in range(1, len(time_values)):

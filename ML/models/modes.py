@@ -12,6 +12,7 @@ from ML.sql_lite_logger import SQLiteLogger
 
 def train_and_test(datamodule, model, cfg):
   model_name = cfg.model.name
+  database_name = cfg.runtime.model_database
   result_dir = f'results/{model_name}/'
   os.makedirs(result_dir, exist_ok=True)
 
@@ -41,7 +42,7 @@ def train_and_test(datamodule, model, cfg):
   
   # Create CSV logger that saves to results folder instead of lightnig logs
   sqlite_logger = SQLiteLogger(
-    db_path='Model_Training.db',
+    db_path=database_name,
     name=cfg.model.name,  # or 'my_experiment'
     config=cfg  # Make sure you're passing the config!
   )
