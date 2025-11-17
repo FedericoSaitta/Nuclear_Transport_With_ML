@@ -1,12 +1,12 @@
 # sweep_train.py
 
 from omegaconf import OmegaConf
-#import torch
+import torch
 
 # Personal imports (same as your main)
-#import ML.datamodule.DNN_Datamodule as DNN_Datamodule
-#import ML.models.DNN_Model as DNN_Model
-#import ML.models.modes as modes
+import ML.datamodule.DNN_Datamodule as DNN_Datamodule
+import ML.models.DNN_Model as DNN_Model
+import ML.models.modes as modes
 
 from sweeper import ConfigSweeper
 from sweeper import ConfigPathForSweeper
@@ -26,7 +26,7 @@ sweep_space = {
     ("model", "activation"): ["relu", "gelu", "tanh"],
     
     
-    ("train", "loss"): ["mse", "mae", "huber", "smooth_l1"],
+    ("train", "loss"): ["mse", "mae"],
 }
 #model = ConfigSweeper("ML/base_simple_U235.yaml") 
 #for combo in generate_permutations(sweep_space):
@@ -38,7 +38,7 @@ if __name__ == "__main__":
     torch.set_float32_matmul_precision("high")
 
     # This object holds the base config and the helpers:
-    model = ConfigSweeper("ML/base_simple_U235.yaml")  
+    model = ConfigSweeper("base_simple_U235.yaml")  
 
     run_id = 0
 

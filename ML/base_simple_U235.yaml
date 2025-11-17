@@ -50,5 +50,5 @@ runtime:
   device: "cuda"
   seed: 42
   drop_last: false
-  num_workers: 15
+  num_workers: 12
   model_database: 'U235_models.db'

@@ -3,13 +3,13 @@ import subprocess
 from pathlib import Path
 
 # Set the global variables needed for the job submission
-CPUS = 15
+CPUS = 12
 GPUS = 1
-EMAIL = 'my_email@gmail.com'
+EMAIL = 'abel.castanedarodriguez@student.manchester.ac.uk'
 
 # Additional configuration
 PARTITION = 'gpuL'  # Options: 'gpuA', 'gpuA40GB', 'gpuL'
-WALLTIME = '7-0'    # 1 day (format: days-hours)
+WALLTIME = '4-0'    # 1 day (format: days-hours)
 JOB_NAME = 'gpu_job'
 CUDA_VERSION = '11.8.0'  # Update this to an available version
 PYTHON_SCRIPT = 'sweep_train.py'
