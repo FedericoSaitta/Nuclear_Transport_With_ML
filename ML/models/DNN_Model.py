@@ -9,6 +9,7 @@ from omegaconf import DictConfig
 from loguru import logger
 import lightning as L
 from torch.optim.lr_scheduler import ReduceLROnPlateau
+from torchmetrics import R2Score
 
 from ML.utils import plot
 from ML.utils import metrics
@@ -17,7 +18,7 @@ from ML.models.ModelArchitectures import SimpleDNN
 from ML.models.Model_helper import get_loss_fn
 
 class DNN_Model(L.LightningModule):
-  def __init__(self, config_object : DictConfig):
+  def __init__(self, config_object):
     super().__init__()
 
     # Model architecture
@@ -46,6 +47,10 @@ class DNN_Model(L.LightningModule):
     # Results
     self.result_dir = 'results/' + config_object.model.name + '/'
     self._has_setup = False
+
+    # Needed for optuna: 
+    self.val_r2 = R2Score() # just used in single target case
+    
 
   # Gets called after datamodule has setup
   def setup(self, stage=None):
@@ -78,16 +83,27 @@ class DNN_Model(L.LightningModule):
   # Gets called called for each validation batch
   def validation_step(self, batch, batch_idx):
     x, y = batch
-    y_hat = self.model(x)
+    y_hat = self.model(x)  # Use self.model, not self(x)
     
-    loss = self.loss_fn(y_hat, y)
-    self.log('val_loss', loss, on_step=False, on_epoch=True, prog_bar=True) # doesnt get logged in sql databse on purpose
+    loss = self.loss_fn(y_hat, y)  # Use self.loss_fn, not self.criterion
+    self.log("val_loss", loss, prog_bar=True, on_epoch=True)
+    
+    # Update R² metric
+    self.val_r2.update(y_hat, y)
+    
     return loss
 
   def on_validation_epoch_end(self):
     epoch_loss = self.trainer.callback_metrics["val_loss"].item()
     self.val_losses.append(epoch_loss)
-
+    
+    # Compute and log R² for Optuna
+    r2 = self.val_r2.compute()
+    self.log("val_r2", r2, prog_bar=True)
+    
+    # Reset for next epoch
+    self.val_r2.reset()
+    
   # Gets for each predict batch
   def predict_step(self, batch, batch_idx, dataloader_idx=0):
     x, y = batch
