@@ -64,8 +64,12 @@ class SQLiteLogger(Logger):
             -- Final training metrics
             final_train_loss REAL,
             final_val_loss REAL,
+            final_val_r2 REAL,
+            final_val_mae REAL,    
             min_train_loss REAL,
             min_val_loss REAL,
+            max_val_r2 REAL,
+            min_val_mae REAL,    
             
             -- Overall test metrics
             mae_avg REAL,
@@ -217,7 +221,8 @@ class SQLiteLogger(Logger):
     pass
   
   @rank_zero_only
-  def update_final_results(self, train_losses, val_losses, test_metrics):
+  def update_final_results(self, train_losses, val_losses, test_metrics, 
+                         val_r2_scores=None, val_mae_scores=None):
     """Update the single row with final results after training/testing completes
     
     Args:
@@ -226,6 +231,8 @@ class SQLiteLogger(Logger):
         test_metrics: Dict containing:
             - mae_avg, rmse_avg, r2_avg: Overall metrics
             - per_target: List of dicts with {name, mae, rmse, r2, mare_tf, mare_ar}
+        val_r2_scores: List of validation R² per epoch
+        val_mae_scores: List of validation MAE per epoch
     """
     import json
     
@@ -242,8 +249,12 @@ class SQLiteLogger(Logger):
         UPDATE experiments SET
             final_train_loss = ?,
             final_val_loss = ?,
+            final_val_r2 = ?,
+            final_val_mae = ?,
             min_train_loss = ?,
             min_val_loss = ?,
+            max_val_r2 = ?,
+            min_val_mae = ?,
             mae_avg = ?,
             rmse_avg = ?,
             r2_avg = ?,
@@ -255,8 +266,12 @@ class SQLiteLogger(Logger):
     ''', (
         train_losses[-1] if train_losses else None,
         val_losses[-1] if val_losses else None,
+        val_r2_scores[-1] if val_r2_scores else None,
+        val_mae_scores[-1] if val_mae_scores else None,
         min(train_losses) if train_losses else None,
         min(val_losses) if val_losses else None,
+        max(val_r2_scores) if val_r2_scores else None,
+        min(val_mae_scores) if val_mae_scores else None,
         test_metrics.get('mae_avg'),
         test_metrics.get('rmse_avg'),
         test_metrics.get('r2_avg'),

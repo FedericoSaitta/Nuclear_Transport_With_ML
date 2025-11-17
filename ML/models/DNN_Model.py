@@ -9,13 +9,14 @@ from omegaconf import DictConfig
 from loguru import logger
 import lightning as L
 from torch.optim.lr_scheduler import ReduceLROnPlateau
-from torchmetrics import R2Score
+from torchmetrics import R2Score, MeanAbsoluteError
 
 from ML.utils import plot
 from ML.utils import metrics
 import ML.datamodule.data_scalers as data_scaler
 from ML.models.ModelArchitectures import SimpleDNN
 from ML.models.Model_helper import get_loss_fn
+
 
 class DNN_Model(L.LightningModule):
   def __init__(self, config_object):
@@ -50,6 +51,7 @@ class DNN_Model(L.LightningModule):
 
     # Needed for optuna: 
     self.val_r2 = R2Score() # just used in single target case
+    self.val_mae = MeanAbsoluteError()
     
 
   # Gets called after datamodule has setup
@@ -83,13 +85,14 @@ class DNN_Model(L.LightningModule):
   # Gets called called for each validation batch
   def validation_step(self, batch, batch_idx):
     x, y = batch
-    y_hat = self.model(x)  # Use self.model, not self(x)
+    y_hat = self.model(x)
     
-    loss = self.loss_fn(y_hat, y)  # Use self.loss_fn, not self.criterion
+    loss = self.loss_fn(y_hat, y)
     self.log("val_loss", loss, prog_bar=True, on_epoch=True)
     
-    # Update R² metric
+    # Update metrics
     self.val_r2.update(y_hat, y)
+    self.val_mae.update(y_hat, y)  # Add this
     
     return loss
 
@@ -100,9 +103,16 @@ class DNN_Model(L.LightningModule):
     # Compute and log R² for Optuna
     r2 = self.val_r2.compute()
     self.log("val_r2", r2, prog_bar=True)
+    self.val_r2_scores.append(r2.item())
+    
+    # Compute and log MAE for Optuna
+    mae = self.val_mae.compute()
+    self.log("val_mae", mae, prog_bar=True)  # Add this
+    self.val_mae_scores.append(mae.item())   # Add this
     
     # Reset for next epoch
     self.val_r2.reset()
+    self.val_mae.reset()  # Add this
     
   # Gets for each predict batch
   def predict_step(self, batch, batch_idx, dataloader_idx=0):
@@ -187,18 +197,20 @@ class DNN_Model(L.LightningModule):
     
     # 6. Log everything to database as a SINGLE ROW
     if hasattr(self.trainer, 'logger') and hasattr(self.trainer.logger, 'update_final_results'):
-        test_metrics = {
-            'mae_avg': float(mae_arr.mean()),
-            'rmse_avg': float(rmse_arr.mean()),
-            'r2_avg': float(r2_arr.mean()),
-            'per_target': per_target_metrics
-        }
-        
-        self.trainer.logger.update_final_results(
-            train_losses=self.train_losses,
-            val_losses=self.val_losses,
-            test_metrics=test_metrics
-        )
+      test_metrics = {
+          'mae_avg': float(mae_arr.mean()),
+          'rmse_avg': float(rmse_arr.mean()),
+          'r2_avg': float(r2_arr.mean()),
+          'per_target': per_target_metrics
+      }
+      
+      self.trainer.logger.update_final_results(
+          train_losses=self.train_losses,
+          val_losses=self.val_losses,
+          val_r2_scores=self.val_r2_scores,
+          val_mae_scores=self.val_mae_scores,  # Add this
+          test_metrics=test_metrics
+      )
         
   def configure_optimizers(self):
     optimizer = torch.optim.AdamW(self.parameters(), lr=self.learning_rate, weight_decay=self.weight_decay)
@@ -486,10 +498,12 @@ class DNN_Model(L.LightningModule):
         logger.info(f"  ✓ Comparison plot saved to: {output_dir}")
 
 
-  def _init_tracking_variables(self):
+def _init_tracking_variables(self):
     """Initialize lists for tracking losses and test results."""
     self.train_losses = []
     self.val_losses = []
+    self.val_r2_scores = []
+    self.val_mae_scores = []
     self.test_predictions = []
     self.test_labels = []
     self.test_inputs = []

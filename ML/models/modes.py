@@ -59,6 +59,7 @@ def train_and_test(datamodule, model, cfg):
   # ========== SAVE VALIDATION METRICS BEFORE TESTING ==========
   val_r2 = trainer.callback_metrics.get("val_r2", -float("inf"))
   val_loss = trainer.callback_metrics.get("val_loss", float("inf"))
+  val_mae = trainer.callback_metrics.get("val_mae", float("inf"))
   # ============================================================
   
   # Load best checkpoint for testing
@@ -71,6 +72,7 @@ def train_and_test(datamodule, model, cfg):
   return {
       "val_r2": float(val_r2),
       "val_loss": float(val_loss),
+      "val_mae": float(val_mae),  # Add this
   }
 
 def train_from_checkpoint_and_test(datamodule, model_class, cfg):

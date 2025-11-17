@@ -70,7 +70,6 @@ class OptunaObjective:
             "layers",
             ["64_64", "128_64", "64_32_64", "128_128", "128_64_32"]
         )
-        # Map string to actual layer list
         layer_map = {
             "64_64": [64, 64],
             "128_64": [128, 64],
@@ -79,22 +78,15 @@ class OptunaObjective:
             "128_64_32": [128, 64, 32],
         }
         cfg.model.layers = layer_map[layer_config]
-        
-        # Dropout
-        dropout = trial.suggest_float("dropout", 0.0, 0.3, step=0.05)
-        cfg.model.dropout_probability = dropout
-        
-        # Activation function
-        activation = trial.suggest_categorical(
-            "activation", 
-            ["relu", "gelu", "tanh", "elu"]
-        )
-        cfg.model.activation = activation
-        
-        # Residual connections
-        residual = trial.suggest_categorical("residual_connections", [True, False])
+
+        # Only suggest residual if architecture supports it
+        supports_residual = layer_config in ["64_64", "128_128"]
+        if supports_residual:
+            residual = trial.suggest_categorical("residual_connections", [True, False])
+        else:
+            residual = False  # No point enabling it
         cfg.model.residual_connections = residual
-        
+
         # Loss function
         loss = trial.suggest_categorical(
             "loss", 
@@ -165,7 +157,7 @@ def run_optuna_study(
     base_config: str = "base_simple_U235.yaml",
     study_name: str = "U235_hyperparameter_optimization",
     storage: str = "sqlite:///optuna_U235.db",
-    n_trials: int = 100,
+    n_trials: int = 500,
     n_jobs: int = 1,
     timeout: int = None,
     load_if_exists: bool = True,
