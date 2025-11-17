@@ -1,8 +1,6 @@
 # This file is used to reshape and mold the csv dataset to be more approachable for ML
 import numpy as np
 import re
-import glob
-import os
 from loguru import logger
 import torch
 from torch.utils.data import TensorDataset
@@ -11,10 +9,7 @@ import polars as pl
 
 
 def check_duplicates(polars_df):
-  # Get all columns except 'run_label'
-  cols_to_check = [col for col in polars_df.columns if col != 'run_label']
-  
-  if polars_df.select(cols_to_check).is_duplicated().any():
+  if polars_df.is_duplicated().any():
     logger.warning("The DataFrame contains duplicate rows (ignoring run_label).")
     return True
   else:
