@@ -81,8 +81,7 @@ class DNN_Model(L.LightningModule):
   def on_train_end(self):
     plot.plot_losses(self.train_losses, self.val_losses, self.result_dir)
 
-    
-  # Gets called called for each validation batch
+  # Gets called for each validation batch
   def validation_step(self, batch, batch_idx):
     x, y = batch
     y_hat = self.model(x)
@@ -90,38 +89,47 @@ class DNN_Model(L.LightningModule):
     loss = self.loss_fn(y_hat, y)
     self.log("val_loss", loss, prog_bar=True, on_epoch=True)
     
-    # Unscale predictions and targets for fair R² comparison
+    # Unscale predictions and targets
     target_scaler = self.trainer.datamodule.target_scaler
     y_unscaled = data_scaler.inverse_transformer(target_scaler, y.cpu().numpy())
     y_hat_unscaled = data_scaler.inverse_transformer(target_scaler, y_hat.detach().cpu().numpy())
     
-    # Convert back to tensors
-    y_unscaled_t = torch.from_numpy(y_unscaled).to(y.device)
-    y_hat_unscaled_t = torch.from_numpy(y_hat_unscaled).to(y_hat.device)
+    # Store for manual R² calculation
+    self.val_preds_epoch.append(y_hat_unscaled)
+    self.val_targets_epoch.append(y_unscaled)
     
-    # Update metrics on UNSCALED data
-    self.val_r2.update(y_hat_unscaled_t, y_unscaled_t)
+    # MAE still uses TorchMetrics
+    y_unscaled_t = torch.from_numpy(y_unscaled.astype(np.float32)).flatten()
+    y_hat_unscaled_t = torch.from_numpy(y_hat_unscaled.astype(np.float32)).flatten()
     self.val_mae.update(y_hat_unscaled_t, y_unscaled_t)
     
     return loss
 
+  # Gets called at end of validation
   def on_validation_epoch_end(self):
     epoch_loss = self.trainer.callback_metrics["val_loss"].item()
     self.val_losses.append(epoch_loss)
     
-    # Compute and log R² for Optuna
-    r2 = self.val_r2.compute()
-    self.log("val_r2", r2, prog_bar=True)
-    self.val_r2_scores.append(r2.item())
+    # Manual R² calculation
+    all_preds = np.concatenate(self.val_preds_epoch, axis=0).flatten()
+    all_targets = np.concatenate(self.val_targets_epoch, axis=0).flatten()
     
-    # Compute and log MAE for Optuna
+    ss_res = np.sum((all_targets - all_preds) ** 2)
+    ss_tot = np.sum((all_targets - np.mean(all_targets)) ** 2)
+    r2 = 1 - (ss_res / (ss_tot + 1e-10))
+    
+    self.log("val_r2", r2, prog_bar=True)
+    self.val_r2_scores.append(float(r2))
+    
+    # MAE
     mae = self.val_mae.compute()
-    self.log("val_mae", mae, prog_bar=True)  # Add this
-    self.val_mae_scores.append(mae.item())   # Add this
+    self.log("val_mae", mae, prog_bar=True)
+    self.val_mae_scores.append(mae.item())
     
     # Reset for next epoch
-    self.val_r2.reset()
-    self.val_mae.reset()  # Add this
+    self.val_mae.reset()
+    self.val_preds_epoch = []
+    self.val_targets_epoch = []
     
   # Gets for each predict batch
   def predict_step(self, batch, batch_idx, dataloader_idx=0):
@@ -517,3 +525,6 @@ class DNN_Model(L.LightningModule):
     self.test_labels = []
     self.test_inputs = []
     self.test_targets_scaled = []
+    # For manual R² calculation
+    self.val_preds_epoch = []
+    self.val_targets_epoch = []

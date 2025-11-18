@@ -10,6 +10,7 @@ from optuna.samplers import TPESampler
 from omegaconf import OmegaConf
 import torch
 from pathlib import Path
+import math
 
 # Personal imports
 import ML.datamodule.DNN_Datamodule as DNN_Datamodule
