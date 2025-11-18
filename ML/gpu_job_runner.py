@@ -5,14 +5,17 @@ from pathlib import Path
 # Set the global variables needed for the job submission
 CPUS = 12
 GPUS = 1
-EMAIL = 'federico.saitta@student.manchester.ac.uk'
+EMAIL = 'abel.castanedarodriguez@student.manchester.ac.uk'
+
+# federico.saitta@student.manchester.ac.uk
+# abel.castanedarodriguez@student.manchester.ac.uk
 
 # Additional configuration
 PARTITION = 'gpuL'  # Options: 'gpuA', 'gpuA40GB', 'gpuL'
 WALLTIME = '4-0'    # 1 day (format: days-hours)
 JOB_NAME = 'gpu_job'
 CUDA_VERSION = '11.8.0'  # Update this to an available version
-PYTHON_SCRIPT = 'optuna_optimizer.py'
+PYTHON_SCRIPT = 'sweep_train.py'
 
 def create_slurm_script(output_file='submit_gpu_job.sh'):
   """Generate a Slurm job submission script."""

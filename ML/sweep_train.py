@@ -16,7 +16,7 @@ sweep_space = {
     ("dataset", "inputs", "U235"): ["MinMax", "robust", "standard", "quantile","log"],
     ("dataset", "targets", "U235"): ["MinMax", "robust", "standard", "quantile","log"],
 
-    ("model", "layers"): [[64, 64], [128, 64], [64, 32, 64],],
+    ("model", "layers"): [[64, 64], [128, 64], [64, 32, 64]],
     ("model", "activation"): ["relu", "gelu", "tanh"],
     
     ("train", "loss"): ["mse", "mae", "huber", "smooth_l1"],
