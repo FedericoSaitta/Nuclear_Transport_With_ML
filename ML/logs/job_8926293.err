@@ -12930,3 +12930,10 @@ Computing feature importance for: U235
 2025-11-18 13:17:34.796 | INFO     | ML.models.DNN_Model:_plot_prediction_comparisons:463 - ====================
 2025-11-18 13:17:34.796 | INFO     | ML.models.DNN_Model:_plot_prediction_comparisons:468 - 
 Plotting prediction comparison for: U235
+2025-11-18 13:17:35.376 | INFO     | ML.models.DNN_Model:_plot_prediction_comparisons:515 -   ✓ Comparison plot saved to: results/run_29/U235
+2025-11-18 13:17:35.426 | INFO     | ML.utils.sql_lite_logger:update_final_results:286 - ✓ Updated final results for experiment 29
+GPU available: True (cuda), used: True
+TPU available: False, using: 0 TPU cores
+HPU available: False, using: 0 HPUs
+2025-11-18 13:17:35.623 | INFO     | ML.datamodule.DNN_Datamodule:setup:38 - Setting up the data module...
+2025-11-18 13:17:35.631 | INFO     | ML.datamodule.dataset_helper:read_data:95 - Reading data from: data/casl_3305_runs_inter.h5
