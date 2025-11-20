@@ -44,7 +44,7 @@ class SQLiteLogger(Logger):
             n_inputs INTEGER,
             n_outputs INTEGER,
             
-            -- Input/Output features
+            -- Input/Output features (JSON with scalers)
             input_features TEXT,
             target_features TEXT,
             
@@ -103,11 +103,11 @@ class SQLiteLogger(Logger):
             residual_connections = getattr(self._config.model, 'residual_connections', None)
             dropout_prob = getattr(self._config.model, 'dropout_probability', None)
             
-            # Input/Output features - handle as dict
+            # Input/Output features - save full dict with scalers
             if hasattr(self._config.dataset, 'inputs'):
                 inputs = self._config.dataset.inputs
                 if isinstance(inputs, dict):
-                    input_features = json.dumps(list(inputs.keys()))
+                    input_features = json.dumps(inputs)  # Save full dict with scalers
                     n_inputs = len(inputs)
                 else:
                     input_features = json.dumps(list(inputs))
@@ -119,7 +119,7 @@ class SQLiteLogger(Logger):
             if hasattr(self._config.dataset, 'targets'):
                 targets = self._config.dataset.targets
                 if isinstance(targets, dict):
-                    target_features = json.dumps(list(targets.keys()))
+                    target_features = json.dumps(targets)  # Save full dict with scalers
                     n_outputs = len(targets)
                 else:
                     target_features = json.dumps(list(targets))

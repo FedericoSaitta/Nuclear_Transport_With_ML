@@ -20,3 +20,5 @@ Makefile
 *.vs
 *.sh
 *.ckpt
+*.err 
+*.html
