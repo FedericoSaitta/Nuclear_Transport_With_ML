@@ -375,14 +375,17 @@ def run_optuna_study(base_config, study_name, storage, n_trials, n_jobs, timeout
 if __name__ == "__main__":
     # Run the optimization with default settings
     # Automatically detects and optimizes all isotope features
+
     study = run_optuna_study(
         base_config="base_simple_chain.yaml",
         study_name="isotope_DNN_optimization",
         storage="sqlite:///optuna_isotope_study.db",
-        n_trials=1_000,  # Adjust based on computational budget
-        n_jobs=1,      # Keep at 1 to avoid GPU conflicts
-        timeout=None,  # No time limit
-        optimize_isotope_scaling=True,  # Enable isotope scaling optimization
+        n_trials=1_000,
+        n_jobs=1,
+        timeout=None,
+        load_if_exists=True,  
+        fixed_operational_features=None,
+        optimize_isotope_scaling=True,
     )
     
     # Optional: Generate visualizations

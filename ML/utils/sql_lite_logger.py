@@ -4,6 +4,7 @@ from pytorch_lightning.loggers import Logger
 from pytorch_lightning.utilities import rank_zero_only
 from loguru import logger
 import json
+from omegaconf import OmegaConf
 
 class SQLiteLogger(Logger):
   def __init__(self, db_path='results/experiments.db', name='experiment', config=None):
@@ -103,27 +104,37 @@ class SQLiteLogger(Logger):
             residual_connections = getattr(self._config.model, 'residual_connections', None)
             dropout_prob = getattr(self._config.model, 'dropout_probability', None)
             
-            # Input/Output features - save full dict with scalers
+            # ============================================================
+            # FIXED: Properly extract input/output features with scalers
+            # ============================================================
+            
+            # Convert OmegaConf to Python dict to preserve key-value pairs
             if hasattr(self._config.dataset, 'inputs'):
-                inputs = self._config.dataset.inputs
-                if isinstance(inputs, dict):
-                    input_features = json.dumps(inputs)  # Save full dict with scalers
-                    n_inputs = len(inputs)
+                inputs_raw = self._config.dataset.inputs
+                # Convert OmegaConf DictConfig to regular Python dict
+                if hasattr(inputs_raw, 'items'):
+                    inputs_dict = dict(inputs_raw)
+                    input_features = json.dumps(inputs_dict)  # {"power_W_g": "MinMax", ...}
+                    n_inputs = len(inputs_dict)
                 else:
-                    input_features = json.dumps(list(inputs))
-                    n_inputs = len(inputs)
+                    # Fallback for old format
+                    input_features = json.dumps(list(inputs_raw))
+                    n_inputs = len(list(inputs_raw))
             else:
                 input_features = None
                 n_inputs = None
             
             if hasattr(self._config.dataset, 'targets'):
-                targets = self._config.dataset.targets
-                if isinstance(targets, dict):
-                    target_features = json.dumps(targets)  # Save full dict with scalers
-                    n_outputs = len(targets)
+                targets_raw = self._config.dataset.targets
+                # Convert OmegaConf DictConfig to regular Python dict
+                if hasattr(targets_raw, 'items'):
+                    targets_dict = dict(targets_raw)
+                    target_features = json.dumps(targets_dict)  # {"U238": "robust", ...}
+                    n_outputs = len(targets_dict)
                 else:
-                    target_features = json.dumps(list(targets))
-                    n_outputs = len(targets)
+                    # Fallback for old format
+                    target_features = json.dumps(list(targets_raw))
+                    n_outputs = len(list(targets_raw))
             else:
                 target_features = None
                 n_outputs = None
