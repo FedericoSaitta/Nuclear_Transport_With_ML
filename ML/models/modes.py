@@ -51,6 +51,8 @@ def train_and_test(datamodule, model, cfg):
       devices="auto",
       callbacks=callbacks,
       logger=sqlite_logger, 
+      gradient_clip_val=1.0, 
+      gradient_clip_algorithm="norm",
   )
 
   # Train the model
