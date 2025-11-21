@@ -21,45 +21,6 @@ class NoOpScaler(BaseEstimator, TransformerMixin):
   def fit_transform(self, X, y=None): return X
   def inverse_transform(self, X): return X
 
-# Log scaler for highly skewed positive data
-class LogScaler(BaseEstimator, TransformerMixin):
-  """
-  Applies log transformation to positive data.
-  Uses log1p (log(1+x)) to handle zeros safely.
-  """
-  def __init__(self, epsilon=1e-10):
-    """
-    Args:
-      epsilon: Small constant added before log to avoid log(0).
-               Default uses log1p which effectively adds 1.
-    """
-    self.epsilon = epsilon
-    
-  def fit(self, X, y=None):
-    """Fit the scaler (no-op for log transform)."""
-    X = np.asarray(X)
-    if np.any(X < 0):
-      logger.warning("LogScaler: Negative values detected. Consider using different scaler.")
-    return self
-  
-  def transform(self, X):
-    """Apply log transformation: log(X + epsilon) or log1p(X)."""
-    X = np.asarray(X)
-    # Use log1p for better numerical stability with small values
-    return np.log1p(X)  # log(1 + X)
-    # Alternative: return np.log(X + self.epsilon)
-  
-  def inverse_transform(self, X):
-    """Inverse log transformation: exp(X) - epsilon or expm1(X)."""
-    X = np.asarray(X)
-    return np.expm1(X)  # exp(X) - 1
-    # Alternative: return np.exp(X) - self.epsilon
-  
-  def fit_transform(self, X, y=None):
-    """Fit and transform in one step."""
-    return self.fit(X, y).transform(X)
-  
-
 # Returns a scaler object based on user's input
 def get_scaler(scaler_name):
   scaler_map = {
@@ -69,8 +30,7 @@ def get_scaler(scaler_name):
     'maxabs': MaxAbsScaler(),
     'normalizer': Normalizer(),
     'quantile': QuantileTransformer(),
-    'power': PowerTransformer(),
-    'log': LogScaler(),           
+    'power': PowerTransformer(),   
     'none': NoOpScaler(),
   }
   

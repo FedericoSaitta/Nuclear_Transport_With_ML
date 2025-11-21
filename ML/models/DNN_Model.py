@@ -10,6 +10,7 @@ from loguru import logger
 import lightning as L
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torchmetrics import R2Score, MeanAbsoluteError
+from sklearn.metrics import r2_score, mean_absolute_error
 
 from ML.utils import plot
 from ML.utils import metrics
@@ -48,11 +49,6 @@ class DNN_Model(L.LightningModule):
     # Results
     self.result_dir = 'results/' + config_object.model.name + '/'
     self._has_setup = False
-
-    # Needed for optuna: 
-    self.val_r2 = R2Score() # just used in single target case
-    self.val_mae = MeanAbsoluteError()
-    
 
   # Gets called after datamodule has setup
   def setup(self, stage=None):
@@ -98,36 +94,27 @@ class DNN_Model(L.LightningModule):
     self.val_preds_epoch.append(y_hat_unscaled)
     self.val_targets_epoch.append(y_unscaled)
     
-    # MAE still uses TorchMetrics
-    y_unscaled_t = torch.from_numpy(y_unscaled.astype(np.float32)).flatten()
-    y_hat_unscaled_t = torch.from_numpy(y_hat_unscaled.astype(np.float32)).flatten()
-    self.val_mae.update(y_hat_unscaled_t, y_unscaled_t)
-    
     return loss
 
-  # Gets called at end of validation
   def on_validation_epoch_end(self):
     epoch_loss = self.trainer.callback_metrics["val_loss"].item()
     self.val_losses.append(epoch_loss)
     
-    # Manual R² calculation
-    all_preds = np.concatenate(self.val_preds_epoch, axis=0).flatten()
-    all_targets = np.concatenate(self.val_targets_epoch, axis=0).flatten()
+    # Get predictions and targets
+    all_preds = np.concatenate(self.val_preds_epoch, axis=0)
+    all_targets = np.concatenate(self.val_targets_epoch, axis=0)
     
-    ss_res = np.sum((all_targets - all_preds) ** 2)
-    ss_tot = np.sum((all_targets - np.mean(all_targets)) ** 2)
-    r2 = 1 - (ss_res / (ss_tot + 1e-10))
-    
+    # R² averaged per output
+    r2 = r2_score(all_targets, all_preds, multioutput='uniform_average')
     self.log("val_r2", r2, prog_bar=True)
-    self.val_r2_scores.append(float(r2))
+    self.val_r2_scores.append(r2)
     
-    # MAE
-    mae = self.val_mae.compute()
+    # MAE averaged per output
+    mae = mean_absolute_error(all_targets, all_preds, multioutput='uniform_average')
     self.log("val_mae", mae, prog_bar=True)
-    self.val_mae_scores.append(mae.item())
+    self.val_mae_scores.append(mae)
     
     # Reset for next epoch
-    self.val_mae.reset()
     self.val_preds_epoch = []
     self.val_targets_epoch = []
     

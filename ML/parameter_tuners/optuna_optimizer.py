@@ -17,7 +17,7 @@ import ML.datamodule.DNN_Datamodule as DNN_Datamodule
 import ML.models.DNN_Model as DNN_Model
 import ML.models.modes as modes
 
-from sweeper import ConfigSweeper
+from ML.parameter_tuners.sweeper import ConfigSweeper
 
 class OptunaObjective:
     """
@@ -96,7 +96,7 @@ class OptunaObjective:
         # Suggest scalers for all optimizable features
         # ============================================================
         
-        scaler_choices = ["MinMax", "robust", "standard", "quantile", "log"]
+        scaler_choices = ["MinMax", "robust", "standard", "quantile", "power"] 
         
         # Optimize input scaling for isotopes/non-fixed features
         for feature in self.optimizable_inputs:
@@ -377,9 +377,9 @@ if __name__ == "__main__":
     # Automatically detects and optimizes all isotope features
 
     study = run_optuna_study(
-        base_config="base_simple_chain.yaml",
+        base_config="parameter_tuners/base_simple_chain.yaml",
         study_name="isotope_DNN_optimization",
-        storage="sqlite:///optuna_isotope_study.db",
+        storage="sqlite:///parameter_tuners/optuna_isotope_study.db",
         n_trials=1_000,
         n_jobs=1,
         timeout=None,

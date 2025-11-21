@@ -19,7 +19,11 @@ class DNN_Datamodule(L.LightningDataModule):
     self.val_batch_size = cfg_object.dataset.val.batch_size
 
     if cfg_object.runtime.num_workers == -1: 
-      self.num_workers = len(os.sched_getaffinity(0))
+      try:
+        self.num_workers = len(os.sched_getaffinity(0))
+      except AttributeError:
+        # Windows doesn't have sched_getaffinity
+        self.num_workers = os.cpu_count()
     else:
       self.num_workers = cfg_object.runtime.num_workers
     logger.info(f"Using {self.num_workers} cpus")

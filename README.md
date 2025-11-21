@@ -30,7 +30,7 @@ pip install -e .
 
 To test Python library installation:
 ``` bash
-python test.py
+python test/test.py
 ```
 
 ## Downloading Data

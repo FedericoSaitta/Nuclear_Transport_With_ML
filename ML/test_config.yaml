@@ -9,16 +9,23 @@ dataset:
     clad_temp_K: "MinMax"
     mod_density_g_cm3: "MinMax"
     boron_ppm: "MinMax"
-    U235: "robust"
-    U233: "robust"
     U238: "robust"
+    U239: "robust"
+    Np239: "robust"
     Pu239: "robust"
     Pu240: "robust"
     Pu241: "robust"
+    Pu242: "robust"
   
   # Target features with scaling
   targets:
-    k_eff: "robust"
+    U238: "robust"
+    U239: "robust"
+    Np239: "robust"
+    Pu239: "robust"
+    Pu240: "robust"
+    Pu241: "robust"
+    Pu242: "robust"
 
   target_delta_conc: True # Uses concentration differences instead of absolute values as targets
 
@@ -29,7 +36,7 @@ dataset:
     batch_size: 8192 # As large as possible to speed up
 
 model:
-  name: "testing_keff"
+  name: "Testing"
   layers: [64, 64]         
   dropout_probability: 0.1
   activation: "gelu"  # Options: relu, tanh, sigmoid, leaky_relu, elu, gelu
@@ -43,12 +50,13 @@ train:
   lr_scheduler_patience: 10
   num_epochs: 500
   early_stopping_patience: 20
+  drop_last: false
 
 runtime:
   mode: "train"    # Options: train, train_from_ckp
   ckp_path: 'results/SimpleDNN/best-SimpleDNN-epoch=397.ckpt'
   device: "cuda"
   seed: 42
-  drop_last: false
-  num_workers: 14
+
+  num_workers: -1
   model_database: 'Simplemodels.db'

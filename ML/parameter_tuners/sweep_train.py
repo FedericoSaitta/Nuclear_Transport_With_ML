@@ -8,9 +8,9 @@ import ML.datamodule.DNN_Datamodule as DNN_Datamodule
 import ML.models.DNN_Model as DNN_Model
 import ML.models.modes as modes
 
-from sweeper import ConfigSweeper
-from sweeper import ConfigPathForSweeper
-from sweeper import generate_permutations, set_cfg_value
+from ML.parameter_tuners.sweeper import ConfigSweeper
+from ML.parameter_tuners.sweeper import ConfigPathForSweeper
+from ML.parameter_tuners.sweeper import generate_permutations, set_cfg_value
 
 sweep_space = {
     ("dataset", "inputs", "U235"): ["MinMax", "robust", "standard", "quantile","log"],
