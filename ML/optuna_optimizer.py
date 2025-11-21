@@ -1,9 +1,8 @@
-#!/usr/bin/env python3
 """
 Optuna-based hyperparameter optimization for DNN models.
 Uses intelligent sampling instead of exhaustive grid search.
+GENERALIZED VERSION: Automatically optimizes scaling for all isotope features.
 """
-
 import optuna
 from optuna.pruners import MedianPruner
 from optuna.samplers import TPESampler
@@ -11,6 +10,7 @@ from omegaconf import OmegaConf
 import torch
 from pathlib import Path
 import math
+import re
 
 # Personal imports
 import ML.datamodule.DNN_Datamodule as DNN_Datamodule
@@ -19,20 +19,63 @@ import ML.models.modes as modes
 
 from sweeper import ConfigSweeper
 
-
 class OptunaObjective:
     """
     Objective function for Optuna optimization.
     Wraps the training process and returns validation metrics.
     """
     
-    def __init__(self, base_config_path: str):
+    def __init__(self, base_config_path, fixed_operational_features = None, optimize_isotope_scaling = True):
         """
         Args:
             base_config_path: Path to the base YAML configuration
+            fixed_operational_features: List of feature names with fixed scaling (e.g., ["power_W_g", "fuel_temp_K"])
+            optimize_isotope_scaling: Whether to optimize scaling for isotope features
         """
         self.base_config_path = base_config_path
         self.sweeper = ConfigSweeper(base_config_path)
+        self.optimize_isotope_scaling = optimize_isotope_scaling
+        
+        # Define operational features that should NOT be optimized
+        # (these have well-established physical scalings)
+        if fixed_operational_features is None:
+            self.fixed_operational_features = [
+                "power_W_g",
+                "fuel_temp_K", 
+                "mod_temp_K",
+                "mod_density_g_cm3",
+                "boron_ppm",
+                "clad_temp_K",
+            ]
+        else:
+            self.fixed_operational_features = fixed_operational_features
+        
+        # Identify optimizable features from base config
+        self._identify_optimizable_features()
+        
+    def _identify_optimizable_features(self):
+        """Identify which input/target features should have their scaling optimized."""
+        cfg = self.sweeper.get_cfg()
+        
+        # Features that can be optimized (not in fixed list)
+        self.optimizable_inputs = []
+        self.optimizable_targets = []
+        
+        if self.optimize_isotope_scaling:
+            # Check inputs
+            if hasattr(cfg.dataset, 'inputs'):
+                for feature_name in cfg.dataset.inputs.keys():
+                    if feature_name not in self.fixed_operational_features:
+                        self.optimizable_inputs.append(feature_name)
+            
+            # Check targets
+            if hasattr(cfg.dataset, 'targets'):
+                for feature_name in cfg.dataset.targets.keys():
+                    if feature_name not in self.fixed_operational_features:
+                        self.optimizable_targets.append(feature_name)
+        
+        print(f"📊 Optimizable input features: {self.optimizable_inputs}")
+        print(f"🎯 Optimizable target features: {self.optimizable_targets}")
         
     def __call__(self, trial: optuna.Trial) -> float:
         """
@@ -42,31 +85,40 @@ class OptunaObjective:
             trial: Optuna trial object for suggesting hyperparameters
             
         Returns:
-            Validation R² score to maximize (ranges from -inf to 1, where 1 is perfect)
+            Validation R² score to maximize (transformed for better optimization)
         """
         # Reset to base config for each trial
         self.sweeper.reset()
         cfg = self.sweeper.get_cfg()
         
         # ============================================================
-        # Define hyperparameter search space using Optuna
+        # DYNAMIC SCALING OPTIMIZATION
+        # Suggest scalers for all optimizable features
         # ============================================================
         
-        # Input scaling for U235
-        u235_input_scaling = trial.suggest_categorical(
-            "u235_input_scaling", 
-            ["MinMax", "robust", "standard", "quantile", "log"]
-        )
-        cfg.dataset.inputs.U235 = u235_input_scaling
+        scaler_choices = ["MinMax", "robust", "standard", "quantile", "log"]
         
-        # Target scaling for U235
-        u235_target_scaling = trial.suggest_categorical(
-            "u235_target_scaling", 
-            ["MinMax", "robust", "standard", "quantile", "log"]
-        )
-        cfg.dataset.targets.U235 = u235_target_scaling
+        # Optimize input scaling for isotopes/non-fixed features
+        for feature in self.optimizable_inputs:
+            suggested_scaler = trial.suggest_categorical(
+                f"input_scaling_{feature}",
+                scaler_choices
+            )
+            cfg.dataset.inputs[feature] = suggested_scaler
         
-        # Model architecture
+        # Optimize target scaling for isotopes/non-fixed features
+        for feature in self.optimizable_targets:
+            suggested_scaler = trial.suggest_categorical(
+                f"target_scaling_{feature}",
+                scaler_choices
+            )
+            cfg.dataset.targets[feature] = suggested_scaler
+        
+        # ============================================================
+        # MODEL ARCHITECTURE OPTIMIZATION
+        # ============================================================
+        
+        # Layer configuration
         layer_config = trial.suggest_categorical(
             "layers",
             ["64_64", "128_64", "64_32_64", "128_128", "128_64_32"]
@@ -91,14 +143,18 @@ class OptunaObjective:
         )
         cfg.model.activation = activation
 
-        # Only suggest residual if architecture supports it
+        # Residual connections (only if architecture supports it)
         supports_residual = layer_config in ["64_64", "128_128"]
         if supports_residual:
             residual = trial.suggest_categorical("residual_connections", [True, False])
         else:
-            residual = False  # No point enabling it
+            residual = False
         cfg.model.residual_connections = residual
 
+        # ============================================================
+        # TRAINING OPTIMIZATION
+        # ============================================================
+        
         # Loss function
         loss = trial.suggest_categorical(
             "loss", 
@@ -119,7 +175,7 @@ class OptunaObjective:
         cfg.dataset.train.batch_size = batch_size
         
         # ============================================================
-        # Configure training
+        # CONFIGURE TRAINING RUN
         # ============================================================
         
         # Force training mode
@@ -132,7 +188,7 @@ class OptunaObjective:
         # cfg.train.num_epochs = 100  # Uncomment to limit epochs during search
         
         # ============================================================
-        # Train model and get validation metric
+        # TRAIN MODEL AND GET VALIDATION METRIC
         # ============================================================
         
         try:
@@ -148,35 +204,29 @@ class OptunaObjective:
             elif hasattr(results, "val_r2"):
                 val_r2 = results.val_r2
             else:
-                print(f"Warning: Could not extract R² metric for trial {trial.number}")
+                print(f"⚠️  Warning: Could not extract R² metric for trial {trial.number}")
                 val_r2 = -float("inf")
             
             # Transform R² to amplify differences near 1
+            # This helps Optuna distinguish between very good models
             # 0.99992 → ~4.1, 0.9999 → ~4.0, 0.999 → ~3.0
             if val_r2 > 0:
                 transformed = -math.log10(1 - val_r2 + 1e-12)
             else:
                 transformed = val_r2  # Keep negative R² as-is
             
-            print(f"Trial {trial.number}: R² = {val_r2:.6f}, transformed = {transformed:.4f}")
+            print(f"✅ Trial {trial.number}: R² = {val_r2:.6f}, transformed = {transformed:.4f}")
             return transformed
             
         except Exception as e:
             import traceback
-            print(f"Trial {trial.number} failed with error: {e}")
+            print(f"❌ Trial {trial.number} failed with error: {e}")
             traceback.print_exc()
             return -float("inf")
 
 
-def run_optuna_study(
-    base_config: str = "base_simple_U235.yaml",
-    study_name: str = "U235_hyperparameter_optimization",
-    storage: str = "sqlite:///optuna_U235.db",
-    n_trials: int = 100,
-    n_jobs: int = 1,
-    timeout: int = None,
-    load_if_exists: bool = True,
-):
+def run_optuna_study(base_config, study_name, storage, n_trials, n_jobs, timeout, load_if_exists, 
+                    fixed_operational_features,optimize_isotope_scaling,):
     """
     Run Optuna hyperparameter optimization study.
     
@@ -188,6 +238,8 @@ def run_optuna_study(
         n_jobs: Number of parallel jobs (set to 1 to avoid GPU conflicts)
         timeout: Time limit in seconds (None for no limit)
         load_if_exists: Whether to continue an existing study
+        fixed_operational_features: List of features with fixed scaling (None = use defaults)
+        optimize_isotope_scaling: Whether to optimize isotope scaling
     """
     
     # Set PyTorch matmul precision
@@ -195,26 +247,24 @@ def run_optuna_study(
     
     # Create study with TPE sampler and median pruner
     sampler = TPESampler(seed=42)
-    pruner = MedianPruner(
-        n_startup_trials=5,  # Don't prune first 5 trials
-        n_warmup_steps=10,   # Don't prune for first 10 epochs
-    )
+    pruner = MedianPruner(n_startup_trials=5,  n_warmup_steps=10)
     
     study = optuna.create_study(
-        study_name=study_name,
-        storage=storage,
-        sampler=sampler,
-        pruner=pruner,
-        direction="maximize",  # Maximize R² score (ranges from -inf to 1)
-        load_if_exists=load_if_exists,
+        study_name=study_name, storage=storage, sampler=sampler, pruner=pruner, direction="maximize", load_if_exists=load_if_exists,
     )
     
     # Create objective
-    objective = OptunaObjective(base_config)
+    objective = OptunaObjective(
+        base_config,
+        fixed_operational_features=fixed_operational_features,
+        optimize_isotope_scaling=optimize_isotope_scaling,
+    )
     
-    print(f"Starting Optuna study: {study_name}")
-    print(f"Number of trials: {n_trials}")
-    print(f"Storage: {storage}")
+    print("=" * 80)
+    print(f"🚀 Starting Optuna study: {study_name}")
+    print(f"📊 Number of trials: {n_trials}")
+    print(f"💾 Storage: {storage}")
+    print(f"🔬 Base config: {base_config}")
     print("=" * 80)
     
     # Run optimization
@@ -228,7 +278,7 @@ def run_optuna_study(
     
     # Print results
     print("\n" + "=" * 80)
-    print("Optimization finished!")
+    print("🎉 Optimization finished!")
     print("=" * 80)
     
     # Convert back from transformed value to actual R²
@@ -238,12 +288,38 @@ def run_optuna_study(
     else:
         best_r2 = best_transformed
     
-    print(f"\nBest trial: {study.best_trial.number}")
-    print(f"Best R²: {best_r2:.6f}")
-    print(f"Best transformed value: {best_transformed:.4f}")
-    print("\nBest hyperparameters:")
+    print(f"\n🏆 Best trial: {study.best_trial.number}")
+    print(f"📈 Best R²: {best_r2:.6f}")
+    print(f"📊 Best transformed value: {best_transformed:.4f}")
+    print("\n⚙️  Best hyperparameters:")
+    
+    # Group parameters by category for better readability
+    scaling_params = {}
+    model_params = {}
+    training_params = {}
+    
     for key, value in study.best_trial.params.items():
-        print(f"  {key}: {value}")
+        if "scaling" in key:
+            scaling_params[key] = value
+        elif key in ["layers", "dropout", "activation", "residual_connections"]:
+            model_params[key] = value
+        else:
+            training_params[key] = value
+    
+    if scaling_params:
+        print("\n  🔬 Feature Scaling:")
+        for key, value in scaling_params.items():
+            print(f"    {key}: {value}")
+    
+    if model_params:
+        print("\n  🏗️  Model Architecture:")
+        for key, value in model_params.items():
+            print(f"    {key}: {value}")
+    
+    if training_params:
+        print("\n  🎓 Training Config:")
+        for key, value in training_params.items():
+            print(f"    {key}: {value}")
     
     # Save best parameters to YAML
     best_config_path = Path(f"best_config_trial_{study.best_trial.number}.yaml")
@@ -251,10 +327,16 @@ def run_optuna_study(
     sweeper.reset()
     cfg = sweeper.get_cfg()
     
-    # Apply best parameters
-    cfg.dataset.inputs.U235 = study.best_trial.params["u235_input_scaling"]
-    cfg.dataset.targets.U235 = study.best_trial.params["u235_target_scaling"]
-
+    # Apply best scaling parameters
+    for key, value in scaling_params.items():
+        if key.startswith("input_scaling_"):
+            feature = key.replace("input_scaling_", "")
+            cfg.dataset.inputs[feature] = value
+        elif key.startswith("target_scaling_"):
+            feature = key.replace("target_scaling_", "")
+            cfg.dataset.targets[feature] = value
+    
+    # Apply best model parameters
     layer_map = {
         "64_64": [64, 64],
         "128_64": [128, 64],
@@ -265,10 +347,9 @@ def run_optuna_study(
     cfg.model.layers = layer_map[study.best_trial.params["layers"]]
     cfg.model.dropout_probability = study.best_trial.params["dropout"]
     cfg.model.activation = study.best_trial.params["activation"]
-
-    # Handle conditional residual_connections
     cfg.model.residual_connections = study.best_trial.params.get("residual_connections", False)
-
+    
+    # Apply best training parameters
     cfg.train.loss = study.best_trial.params["loss"]
     cfg.train.learning_rate = study.best_trial.params["learning_rate"]
     cfg.train.weight_decay = study.best_trial.params["weight_decay"]
@@ -276,48 +357,57 @@ def run_optuna_study(
     cfg.model.name = f"best_trial_{study.best_trial.number}"
     
     OmegaConf.save(cfg, best_config_path)
-    print(f"\nBest configuration saved to: {best_config_path}")
+    print(f"\n💾 Best configuration saved to: {best_config_path}")
     
     # Print trial statistics
-    print(f"\nTotal trials: {len(study.trials)}")
+    print(f"\n📊 Trial Statistics:")
+    print(f"  Total trials: {len(study.trials)}")
     completed_trials = [t for t in study.trials if t.state == optuna.trial.TrialState.COMPLETE]
-    print(f"Completed trials: {len(completed_trials)}")
+    print(f"  ✅ Completed trials: {len(completed_trials)}")
     pruned_trials = [t for t in study.trials if t.state == optuna.trial.TrialState.PRUNED]
-    print(f"Pruned trials: {len(pruned_trials)}")
+    print(f"  ✂️  Pruned trials: {len(pruned_trials)}")
     failed_trials = [t for t in study.trials if t.state == optuna.trial.TrialState.FAIL]
-    print(f"Failed trials: {len(failed_trials)}")
+    print(f"  ❌ Failed trials: {len(failed_trials)}")
     
     return study
 
 
 if __name__ == "__main__":
-    # Run the optimization
+    # Run the optimization with default settings
+    # Automatically detects and optimizes all isotope features
     study = run_optuna_study(
-        base_config="base_simple_U235.yaml",
-        study_name="U235_DNN_optimization",
-        storage="sqlite:///optuna_U235_study.db",
-        n_trials=300,  # Adjust based on computational budget
+        base_config="base_simple_chain.yaml",
+        study_name="isotope_DNN_optimization",
+        storage="sqlite:///optuna_isotope_study.db",
+        n_trials=1_000,  # Adjust based on computational budget
         n_jobs=1,      # Keep at 1 to avoid GPU conflicts
         timeout=None,  # No time limit
+        optimize_isotope_scaling=True,  # Enable isotope scaling optimization
     )
     
     # Optional: Generate visualizations
     try:
         import optuna.visualization as vis
         
+        print("\n📊 Generating visualization plots...")
+        
         # Optimization history
         fig = vis.plot_optimization_history(study)
-        fig.write_html("optuna_optimization_history.html")
+        fig.write_html("chain_optuna_optimization_history.html")
         
         # Parameter importance
         fig = vis.plot_param_importances(study)
-        fig.write_html("optuna_param_importances.html")
+        fig.write_html("chain_optuna_param_importances.html")
         
         # Parallel coordinate plot
         fig = vis.plot_parallel_coordinate(study)
-        fig.write_html("optuna_parallel_coordinate.html")
+        fig.write_html("chain_optuna_parallel_coordinate.html")
         
-        print("\nVisualization plots saved as HTML files.")
+        # Slice plot
+        fig = vis.plot_slice(study)
+        fig.write_html("chain_optuna_slice_plot.html")
+        
+        print("✅ Visualization plots saved as HTML files.")
         
     except ImportError:
-        print("\nInstall plotly for visualization: pip install plotly")
+        print("\n⚠️  Install plotly for visualization: pip install plotly")

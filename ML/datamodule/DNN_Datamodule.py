@@ -17,12 +17,18 @@ class DNN_Datamodule(L.LightningDataModule):
     self.fraction_of_data = cfg_object.dataset.fraction_of_data
     self.train_batch_size = cfg_object.dataset.train.batch_size
     self.val_batch_size = cfg_object.dataset.val.batch_size
-    self.num_workers = cfg_object.runtime.num_workers
+
+    if cfg_object.runtime.num_workers == -1: 
+      self.num_workers = len(os.sched_getaffinity(0))
+    else:
+      self.num_workers = cfg_object.runtime.num_workers
+    logger.info(f"Using {self.num_workers} cpus")
     
     # Get the inputs and target dictionaries that include their respective scaling
     self.inputs = data_scalers.create_scaler_dict(cfg_object.dataset['inputs'])
     self.target = data_scalers.create_scaler_dict(cfg_object.dataset['targets'])
     self.delta_conc = cfg_object.dataset.target_delta_conc
+    self.train_drop_last = cfg_object.train.drop_last
 
     # === Result output directory === #
     self.result_dir = f'results/{cfg_object.model.name}/'
@@ -81,7 +87,7 @@ class DNN_Datamodule(L.LightningDataModule):
     logger.info(f"Test dataset size: {len(y_test)}")
 
   def train_dataloader(self):
-    return DataLoader(self.train_dataset, batch_size=self.train_batch_size, shuffle=True, num_workers=self.num_workers, persistent_workers=True, drop_last=False, pin_memory=False)
+    return DataLoader(self.train_dataset, batch_size=self.train_batch_size, shuffle=True, num_workers=self.num_workers, persistent_workers=True, drop_last=self.train_drop_last, pin_memory=False)
 
   def val_dataloader(self):
     return DataLoader(self.val_dataset, batch_size=self.val_batch_size, shuffle=False, num_workers=self.num_workers, persistent_workers=True)
