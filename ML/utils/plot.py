@@ -168,33 +168,134 @@ def plot_predictions_vs_actuals(actuals, predictions, mae, rmse, r2, plots_folde
 
 
 def plot_residuals_combined(actuals, predictions, plots_folder):
-  residuals = actuals - predictions
-  
-  fig, axes = plt.subplots(1, 2, figsize=(16, 6))
-  
-  # Left plot: Residual scatter
-  axes[0].scatter(predictions, residuals, alpha=0.5, s=20, edgecolors='k', linewidth=0.5)
-  axes[0].axhline(y=0, color='r', linestyle='--', linewidth=2)
-  axes[0].set_xlabel('Predicted Values', fontsize=12)
-  axes[0].set_ylabel('Residuals (Actual - Predicted)', fontsize=12)
-  axes[0].set_title('Residual Plot', fontsize=14)
-  axes[0].grid(True, alpha=0.3)
-  
-  # Right plot: Residual distribution
-  axes[1].hist(residuals, bins=50, edgecolor='black', alpha=0.7, color='steelblue')
-  axes[1].axvline(x=0, color='r', linestyle='--', linewidth=2)
-  axes[1].set_xlabel('Residuals', fontsize=12)
-  axes[1].set_ylabel('Frequency', fontsize=12)
-  axes[1].set_title(f'Residual Distribution\nMean: {residuals.mean():.4f}, Std: {residuals.std():.4f}', 
-                    fontsize=14)
-  axes[1].grid(True, alpha=0.3)
-  
-  plt.tight_layout()
-  filepath = os.path.join(plots_folder, 'residuals_combined.png')
-  plt.savefig(filepath, dpi=300)
-  plt.close()
-  logger.info(f"Model prediction residuals saved to: {filepath}")
-
+    residuals = actuals - predictions
+    
+    # ==========================================
+    # PLOT 1: Linear Scale (Original)
+    # ==========================================
+    fig, axes = plt.subplots(1, 2, figsize=(16, 6))
+    
+    # Left: Residual scatter
+    axes[0].scatter(predictions, residuals, alpha=0.5, s=20, edgecolors='k', linewidth=0.5)
+    axes[0].axhline(y=0, color='r', linestyle='--', linewidth=2)
+    axes[0].set_xlabel('Predicted Values', fontsize=12)
+    axes[0].set_ylabel('Residuals (Actual - Predicted)', fontsize=12)
+    axes[0].set_title('Residual Plot', fontsize=14)
+    axes[0].grid(True, alpha=0.3)
+    
+    # Right: Residual distribution
+    axes[1].hist(residuals, bins=50, edgecolor='black', alpha=0.7, color='steelblue')
+    axes[1].axvline(x=0, color='r', linestyle='--', linewidth=2)
+    axes[1].set_xlabel('Residuals', fontsize=12)
+    axes[1].set_ylabel('Frequency', fontsize=12)
+    axes[1].set_title(f'Residual Distribution\nMean: {residuals.mean():.4e}, Std: {residuals.std():.4e}', 
+                      fontsize=14)
+    axes[1].grid(True, alpha=0.3)
+    
+    plt.tight_layout()
+    filepath = os.path.join(plots_folder, 'residuals_combined.png')
+    plt.savefig(filepath, dpi=300)
+    plt.close()
+    logger.info(f"Model prediction residuals (linear scale) saved to: {filepath}")
+    
+    # ==========================================
+    # PLOT 2: Log-Log Scale (ABSOLUTE VALUES)
+    # ==========================================
+    fig, axes = plt.subplots(1, 2, figsize=(16, 6))
+    
+    # Use ABSOLUTE values for log plotting
+    abs_predictions = np.abs(predictions)
+    abs_residuals = np.abs(residuals)
+    
+    # Filter only zeros (log can't handle zero)
+    mask_nonzero_pred = abs_predictions > 0
+    mask_nonzero_res = abs_residuals > 0
+    mask_combined = mask_nonzero_pred & mask_nonzero_res
+    
+    if np.sum(mask_combined) > 0:
+        # Left: Residual scatter (log-log) with ABSOLUTE VALUES
+        # Color by whether original prediction was positive or negative
+        mask_pos_pred = (predictions > 0) & mask_combined
+        mask_neg_pred = (predictions < 0) & mask_combined
+        
+        n_pos = np.sum(mask_pos_pred)
+        n_neg = np.sum(mask_neg_pred)
+        
+        if n_pos > 0:
+            axes[0].scatter(abs_predictions[mask_pos_pred], 
+                           abs_residuals[mask_pos_pred], 
+                           alpha=0.5, s=20, edgecolors='k', linewidth=0.5, 
+                           color='blue', 
+                           label=f'Positive predictions ({n_pos} pts)')
+        
+        if n_neg > 0:
+            axes[0].scatter(abs_predictions[mask_neg_pred], 
+                           abs_residuals[mask_neg_pred], 
+                           alpha=0.5, s=20, edgecolors='k', linewidth=0.5, 
+                           color='red', 
+                           label=f'Negative predictions ({n_neg} pts)')
+        
+        axes[0].set_xscale('log')
+        axes[0].set_yscale('log')
+        axes[0].set_xlabel('|Predicted Values| (log scale)', fontsize=12)
+        axes[0].set_ylabel('|Residuals| (log scale)', fontsize=12)
+        axes[0].set_title('Residual Plot (Log-Log Scale, Absolute Values)', fontsize=14)
+        axes[0].legend(fontsize=10)
+        axes[0].grid(True, which='both', alpha=0.3)
+        
+        # Add reference line: |residual| = |prediction| (100% error)
+        pred_range = [abs_predictions[mask_combined].min(), 
+                      abs_predictions[mask_combined].max()]
+        axes[0].plot(pred_range, pred_range, 'k--', alpha=0.3, linewidth=1, 
+                    label='100% error line')
+        axes[0].legend(fontsize=10)
+        
+        # Right: Residual distribution (log scale)
+        abs_residuals_valid = abs_residuals[mask_nonzero_res]
+        
+        if len(abs_residuals_valid) > 0:
+            min_res = np.min(abs_residuals_valid)
+            max_res = np.max(abs_residuals_valid)
+            log_bins = np.logspace(np.log10(min_res), np.log10(max_res), 50)
+            
+            counts, bins, patches = axes[1].hist(abs_residuals_valid, bins=log_bins, 
+                                                  edgecolor='black', alpha=0.7, 
+                                                  color='steelblue')
+            axes[1].set_xscale('log')
+            axes[1].set_yscale('log')
+            axes[1].set_xlabel('|Residuals| (log scale)', fontsize=12)
+            axes[1].set_ylabel('Frequency (log scale)', fontsize=12)
+            
+            median_abs_res = np.median(abs_residuals_valid)
+            mean_abs_res = np.mean(abs_residuals_valid)
+            axes[1].set_title(f'|Residual| Distribution (Log Scale)\n'
+                            f'Median: {median_abs_res:.4e}, Mean: {mean_abs_res:.4e}', 
+                            fontsize=14)
+            axes[1].grid(True, which='both', alpha=0.3)
+            
+            # Add diagnostics
+            print(f"\n  === LOG-LOG FILTERING DIAGNOSTICS ===")
+            print(f"  Total points: {len(predictions)}")
+            print(f"  |Predictions| > 0: {np.sum(mask_nonzero_pred)}")
+            print(f"  |Residuals| > 0: {np.sum(mask_nonzero_res)}")
+            print(f"  Valid for log-log: {np.sum(mask_combined)}")
+            print(f"  Positive predictions: {n_pos}")
+            print(f"  Negative predictions: {n_neg}")
+            print(f"  Filtered out: {len(predictions) - np.sum(mask_combined)}")
+        else:
+            axes[1].text(0.5, 0.5, 'No non-zero residuals to plot', 
+                        ha='center', va='center', transform=axes[1].transAxes)
+    else:
+        axes[0].text(0.5, 0.5, 'Insufficient data for log-log plot\n(need non-zero predictions and residuals)', 
+                    ha='center', va='center', transform=axes[0].transAxes)
+        axes[1].text(0.5, 0.5, 'Insufficient data for log-log plot', 
+                    ha='center', va='center', transform=axes[1].transAxes)
+    
+    plt.tight_layout()
+    filepath_log = os.path.join(plots_folder, 'residuals_combined_loglog.png')
+    plt.savefig(filepath_log, dpi=300)
+    plt.close()
+    logger.info(f"Model prediction residuals (log-log scale) saved to: {filepath_log}")
 
 def plot_feature_importance(importance_means, importance_stds, feature_names, baseline, plots_folder, metric_name, n_top=20):
   n_features = len(importance_means)
@@ -305,3 +406,96 @@ def plot_prediction_comparison(ground_truth, teacher_forced_preds, autoregressiv
   
   plt.savefig(os.path.join(result_dir, f'{target_name}_prediction_comparison.png'), dpi=300, bbox_inches='tight')
   plt.close()
+
+def plot_error_growth_metric(avg_tf_error, avg_ar_error, std_tf_error, std_ar_error,
+                             target_name, output_dir, num_runs, 
+                             metric_name='MALE', ylabel='Error', skip_first_n=0,
+                             tf_errors_all=None, ar_errors_all=None):  # ← Add raw data
+  """Plot error growth over time for a specific metric, with both linear and log scales."""
+  os.makedirs(output_dir, exist_ok=True)
+  
+  # Skip first N steps if requested
+  if skip_first_n > 0:
+      time_steps = np.arange(skip_first_n, len(avg_tf_error))
+      avg_tf_error = avg_tf_error[skip_first_n:]
+      avg_ar_error = avg_ar_error[skip_first_n:]
+      std_tf_error = std_tf_error[skip_first_n:]
+      std_ar_error = std_ar_error[skip_first_n:]
+      if tf_errors_all is not None:
+          tf_errors_all = tf_errors_all[:, skip_first_n:]
+          ar_errors_all = ar_errors_all[:, skip_first_n:]
+  else:
+      time_steps = np.arange(len(avg_tf_error))
+  
+  # Create both linear and log scale versions
+  for scale_type in ['linear', 'log']:
+      fig, ax = plt.subplots(figsize=(12, 7))
+      
+      # Plot mean errors
+      ax.plot(time_steps, avg_tf_error, label='Teacher-Forcing (mean)', 
+              color='#2E86AB', linewidth=2.5, alpha=0.9, zorder=5)
+      ax.plot(time_steps, avg_ar_error, label='Autoregressive (mean)', 
+              color='#A23B72', linewidth=2.5, alpha=0.9, zorder=5)
+      
+      # Add shaded regions
+      if scale_type == 'linear':
+          # LINEAR SCALE: Use mean ± std (arithmetic)
+          ax.fill_between(time_steps, 
+                          avg_tf_error - std_tf_error,
+                          avg_tf_error + std_tf_error,
+                          alpha=0.2, color='#2E86AB', label='TF ±1σ')
+          ax.fill_between(time_steps,
+                          avg_ar_error - std_ar_error,
+                          avg_ar_error + std_ar_error,
+                          alpha=0.2, color='#A23B72', label='AR ±1σ')
+      else:
+          # LOG SCALE: Use percentiles (proper error propagation)
+          if tf_errors_all is not None and ar_errors_all is not None:
+              # Compute 16th and 84th percentiles (equivalent to ±1σ for normal distribution)
+              tf_lower = np.percentile(tf_errors_all, 16, axis=0)
+              tf_upper = np.percentile(tf_errors_all, 84, axis=0)
+              ar_lower = np.percentile(ar_errors_all, 16, axis=0)
+              ar_upper = np.percentile(ar_errors_all, 84, axis=0)
+              
+              ax.fill_between(time_steps, tf_lower, tf_upper,
+                              alpha=0.2, color='#2E86AB', label='TF 16-84%ile')
+              ax.fill_between(time_steps, ar_lower, ar_upper,
+                              alpha=0.2, color='#A23B72', label='AR 16-84%ile')
+          else:
+              # Fallback: Use multiplicative factors (geometric std)
+              # This is approximate but better than arithmetic on log scale
+              tf_factor = np.exp(std_tf_error / (avg_tf_error + 1e-20))
+              ar_factor = np.exp(std_ar_error / (avg_ar_error + 1e-20))
+              
+              ax.fill_between(time_steps,
+                              avg_tf_error / tf_factor,
+                              avg_tf_error * tf_factor,
+                              alpha=0.2, color='#2E86AB', label='TF approx. ±1σ')
+              ax.fill_between(time_steps,
+                              avg_ar_error / ar_factor,
+                              avg_ar_error * ar_factor,
+                              alpha=0.2, color='#A23B72', label='AR approx. ±1σ')
+      
+      ax.set_xlabel('Time Step', fontsize=13, fontweight='bold')
+      
+      # Set scale and labels
+      if scale_type == 'log':
+          ax.set_yscale('log')
+          ax.set_ylabel(f'{ylabel} (log scale)', fontsize=13, fontweight='bold')
+          title_suffix = ' (Log Scale)'
+      else:
+          ax.set_ylabel(ylabel, fontsize=13, fontweight='bold')
+          title_suffix = ''
+      
+      ax.set_title(f'{metric_name} Growth Over Time: {target_name}{title_suffix}\n(Averaged over {num_runs} runs)', 
+                    fontsize=14, fontweight='bold', pad=15)
+      ax.legend(fontsize=10, loc='best', framealpha=0.9)
+      ax.grid(True, alpha=0.3, linestyle='--')
+      
+      plt.tight_layout()
+      
+      filename = os.path.join(output_dir, f'{target_name}_{metric_name}_growth_{scale_type}.png')
+      plt.savefig(filename, dpi=300, bbox_inches='tight')
+      plt.close()
+      
+      print(f"{metric_name} growth plot ({scale_type} scale) saved: {filename}")

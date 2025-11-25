@@ -186,6 +186,22 @@ class DNN_Model(L.LightningModule):
       y_true_test, y_pred_test, target_names, datamodule,
       per_target_metrics  # Pass to add MARE values
     )
+
+    #
+    # logger.info(f'\n{"="*60}')
+    # logger.info('Running diagnostic for all targets')
+    # logger.info(f'{"="*60}')
+    
+    # for idx, target_name in enumerate(target_names):
+    #     # ✅ CORRECT: No 'self' parameter, use test_data
+    #     self.debug_prediction_comparison(
+    #        idx, target_name, datamodule, 
+    #        test_data['inputs'],           # ✅ Use prepared data
+    #        test_data['targets_scaled'],   # ✅ Use prepared data
+    #        y_pred_test, 
+    #       ar_preds_dict, ar_truth_dict, steps_per_run
+    #   )
+    
     
     # 4. Feature importance
     self._compute_feature_importance(
@@ -198,6 +214,11 @@ class DNN_Model(L.LightningModule):
         target_names, steps_per_run, datamodule.delta_conc,
         test_data['inputs'], datamodule
     )
+
+    self._plot_error_growth(
+        y_pred_test, ar_preds_dict, ar_truth_dict, 
+        target_names, steps_per_run, datamodule.delta_conc,
+        test_data['inputs'], datamodule)
     
     # 6. Log everything to database as a SINGLE ROW
     if hasattr(self.trainer, 'logger') and hasattr(self.trainer.logger, 'update_final_results'):
@@ -500,7 +521,170 @@ class DNN_Model(L.LightningModule):
         )
         
         logger.info(f"  ✓ Comparison plot saved to: {output_dir}")
+        
+  def _plot_error_growth(self, y_pred_test, ar_predictions_dict, 
+                       ar_ground_truth_dict, target_names, 
+                       steps_per_run, delta_conc, X_test, datamodule):
+    """Calculate and plot how prediction error grows over time using multiple metrics."""
+    logger.info(f"\n{'='*20}")
+    logger.info("ERROR GROWTH ANALYSIS (Teacher-Forcing vs Autoregressive)")
+    logger.info(f"{'='*20}")
+    
+    num_runs = len(y_pred_test) // steps_per_run
+    logger.info(f"Analyzing error growth across {num_runs} runs")
+    
+    for idx, target_name in enumerate(target_names):
+        logger.info(f"\nAnalyzing error growth for: {target_name}")
+        
+        # Initialize arrays to store errors for each run
+        tf_mae_errors = []
+        ar_mae_errors = []
+        tf_male_errors = []
+        ar_male_errors = []
+        tf_rmse_errors = []
+        ar_rmse_errors = []
+        
+        for run_idx in range(num_runs):
+            start_idx = run_idx * steps_per_run
+            end_idx = start_idx + steps_per_run
+            run_slice = slice(start_idx, end_idx)
+            
+            # Get data for this run
+            ground_truth_deltas = ar_ground_truth_dict[target_name][run_slice]
+            autoregressive_deltas = ar_predictions_dict[target_name][run_slice]
+            teacher_forced_deltas = (
+                y_pred_test[run_slice, idx] 
+                if y_pred_test.ndim > 1 
+                else y_pred_test[run_slice]
+            )
+            
+            if delta_conc:
+                X_first_unscaled = data_scaler.inverse_transformer(
+                    datamodule.input_scaler, 
+                    X_test[start_idx].reshape(1, -1)
+                )[0]
+                
+                if target_name in datamodule.col_index_map:
+                    initial_conc = X_first_unscaled[datamodule.col_index_map[target_name]]
+                    
+                    ground_truth = initial_conc + np.cumsum(ground_truth_deltas)
+                    autoregressive_preds = initial_conc + np.cumsum(autoregressive_deltas)
+                    teacher_forced_preds = initial_conc + np.cumsum(teacher_forced_deltas)
+                else:
+                    logger.warning(
+                        f"{target_name} not in inputs - cannot convert to absolute. "
+                        "Using deltas for error calculation."
+                    )
+                    ground_truth = ground_truth_deltas
+                    autoregressive_preds = autoregressive_deltas
+                    teacher_forced_preds = teacher_forced_deltas
+            else:
+                ground_truth = ground_truth_deltas
+                autoregressive_preds = autoregressive_deltas
+                teacher_forced_preds = teacher_forced_deltas
+            
+            # Calculate MAE (Mean Absolute Error)
+            tf_mae = np.abs(teacher_forced_preds - ground_truth)
+            ar_mae = np.abs(autoregressive_preds - ground_truth)
+            tf_mae_errors.append(tf_mae)
+            ar_mae_errors.append(ar_mae)
+            
+            # Calculate MALE (Mean Absolute Log Error)
+            epsilon = 1e-20
+            tf_male = np.abs(np.log10(np.abs(teacher_forced_preds) + epsilon) - 
+                            np.log10(np.abs(ground_truth) + epsilon))
+            ar_male = np.abs(np.log10(np.abs(autoregressive_preds) + epsilon) - 
+                            np.log10(np.abs(ground_truth) + epsilon))
+            tf_male_errors.append(tf_male)
+            ar_male_errors.append(ar_male)
+            
+            # Calculate RMSE components (will take sqrt of mean later)
+            tf_rmse = (teacher_forced_preds - ground_truth) ** 2
+            ar_rmse = (autoregressive_preds - ground_truth) ** 2
+            tf_rmse_errors.append(tf_rmse)
+            ar_rmse_errors.append(ar_rmse)
+        
+        # Convert to arrays (shape: num_runs x steps_per_run)
+        tf_mae_errors = np.array(tf_mae_errors)
+        ar_mae_errors = np.array(ar_mae_errors)
+        tf_male_errors = np.array(tf_male_errors)
+        ar_male_errors = np.array(ar_male_errors)
+        tf_rmse_errors = np.array(tf_rmse_errors)
+        ar_rmse_errors = np.array(ar_rmse_errors)
+        
+        # Calculate statistics across runs for each timestep
+        # MAE
+        avg_tf_mae = np.mean(tf_mae_errors, axis=0)
+        avg_ar_mae = np.mean(ar_mae_errors, axis=0)
+        std_tf_mae = np.std(tf_mae_errors, axis=0)
+        std_ar_mae = np.std(ar_mae_errors, axis=0)
+        
+        # MALE
+        avg_tf_male = np.mean(tf_male_errors, axis=0)
+        avg_ar_male = np.mean(ar_male_errors, axis=0)
+        std_tf_male = np.std(tf_male_errors, axis=0)
+        std_ar_male = np.std(ar_male_errors, axis=0)
+        
+        # RMSE (take sqrt after averaging)
+        avg_tf_rmse = np.sqrt(np.mean(tf_rmse_errors, axis=0))
+        avg_ar_rmse = np.sqrt(np.mean(ar_rmse_errors, axis=0))
+        std_tf_rmse = np.std(np.sqrt(tf_rmse_errors), axis=0)
+        std_ar_rmse = np.std(np.sqrt(ar_rmse_errors), axis=0)
+        
+        # Log summary statistics
+        logger.info(f"\n{'='*60}")
+        logger.info(f"ERROR METRICS SUMMARY - {target_name}")
+        logger.info(f"{'='*60}")
+        logger.info(f"Mean Absolute Error (MAE):")
+        logger.info(f"  TF: Initial={avg_tf_mae[0]:.2e}, Final={avg_tf_mae[-1]:.2e}")
+        logger.info(f"  AR: Initial={avg_ar_mae[0]:.2e}, Final={avg_ar_mae[-1]:.2e}")
+        logger.info(f"\nMean Absolute Log Error (MALE):")
+        logger.info(f"  TF: Initial={avg_tf_male[0]:.3f}, Final={avg_tf_male[-1]:.3f}")
+        logger.info(f"  AR: Initial={avg_ar_male[0]:.3f}, Final={avg_ar_male[-1]:.3f}")
+        logger.info(f"\nRoot Mean Squared Error (RMSE):")
+        logger.info(f"  TF: Initial={avg_tf_rmse[0]:.2e}, Final={avg_tf_rmse[-1]:.2e}")
+        logger.info(f"  AR: Initial={avg_ar_rmse[0]:.2e}, Final={avg_ar_rmse[-1]:.2e}")
+        
+        # Save plots
+        output_dir = os.path.join(self.result_dir, target_name)
+        
+        # Plot 1: MAE over time
+        plot.plot_error_growth_metric(
+            avg_tf_mae, avg_ar_mae,
+            std_tf_mae, std_ar_mae,
+            target_name, output_dir, num_runs,
+            metric_name='MAE',
+            ylabel='Mean Absolute Error',
+            skip_first_n=0,
+            tf_errors_all=tf_mae_errors,  # ← Pass raw data
+            ar_errors_all=ar_mae_errors   # ← Pass raw data
+        )
 
+        # Plot 2: MALE over time
+        plot.plot_error_growth_metric(
+            avg_tf_male, avg_ar_male,
+            std_tf_male, std_ar_male,
+            target_name, output_dir, num_runs,
+            metric_name='MALE',
+            ylabel='Mean Absolute Log Error',
+            skip_first_n=0,
+            tf_errors_all=tf_male_errors,  # ← Pass raw data
+            ar_errors_all=ar_male_errors   # ← Pass raw data
+        )
+
+        # Plot 3: RMSE over time
+        plot.plot_error_growth_metric(
+            avg_tf_rmse, avg_ar_rmse,
+            std_tf_rmse, std_ar_rmse,
+            target_name, output_dir, num_runs,
+            metric_name='RMSE',
+            ylabel='Root Mean Squared Error',
+            skip_first_n=0,
+            tf_errors_all=np.sqrt(tf_rmse_errors),  # ← Take sqrt first
+            ar_errors_all=np.sqrt(ar_rmse_errors)   # ← Take sqrt first
+        )
+        
+        logger.info(f"  ✓ Error growth plots saved to: {output_dir}")
 
   def _init_tracking_variables(self):
     """Initialize lists for tracking losses and test results."""
@@ -515,3 +699,70 @@ class DNN_Model(L.LightningModule):
     # For manual R² calculation
     self.val_preds_epoch = []
     self.val_targets_epoch = []
+
+  def debug_prediction_comparison(self, idx, target_name, datamodule, X_test, Y_test, y_pred_test, 
+                                ar_predictions_dict, ar_ground_truth_dict, steps_per_run):
+    """Debug why teacher-forcing is worse than autoregressive."""
+    
+    print(f"\n{'='*60}")
+    print(f"DEBUGGING {target_name}")
+    print(f"{'='*60}")
+    
+    # Get first run data
+    first_run = slice(0, steps_per_run)
+    tf_deltas = y_pred_test[first_run, idx] if y_pred_test.ndim > 1 else y_pred_test[first_run]
+    ar_deltas = ar_predictions_dict[target_name][first_run]
+    gt_deltas = ar_ground_truth_dict[target_name][first_run]
+    
+    print(f"\n1. Delta Statistics (first 10 steps):")
+    print(f"   TF deltas:  {tf_deltas[:10]}")
+    print(f"   AR deltas:  {ar_deltas[:10]}")
+    print(f"   GT deltas:  {gt_deltas[:10]}")
+    
+    # Check if deltas match ground truth
+    tf_delta_error = np.abs(tf_deltas - gt_deltas).mean()
+    ar_delta_error = np.abs(ar_deltas - gt_deltas).mean()
+    print(f"\n2. Mean Absolute Delta Error:")
+    print(f"   TF: {tf_delta_error:.2e}")
+    print(f"   AR: {ar_delta_error:.2e}")
+    
+    # Check initial concentration
+    X_first = data_scaler.inverse_transformer(
+        datamodule.input_scaler, X_test[0].reshape(1, -1)
+    )[0]
+    
+    if target_name in datamodule.col_index_map:
+        initial_from_input = X_first[datamodule.col_index_map[target_name]]
+        print(f"\n3. Initial concentration from X_test[0]: {initial_from_input:.6e}")
+    else:
+        print(f"\n3. ⚠️ {target_name} NOT in inputs - cannot extract initial concentration!")
+        initial_from_input = 0.0
+    
+    # Check ground truth reconstruction
+    Y_test_unscaled = data_scaler.inverse_transformer(datamodule.target_scaler, Y_test)
+    gt_from_Y = Y_test_unscaled[first_run, idx]
+    
+    print(f"\n4. Ground truth delta comparison:")
+    print(f"   From ar_ground_truth: {gt_deltas[:5]}")
+    print(f"   From Y_test_unscaled: {gt_from_Y[:5]}")
+    print(f"   Match: {np.allclose(gt_deltas, gt_from_Y)}")
+    
+    # Reconstruct absolute concentrations
+    tf_absolute = initial_from_input + np.cumsum(tf_deltas)
+    ar_absolute = initial_from_input + np.cumsum(ar_deltas)
+    gt_absolute = initial_from_input + np.cumsum(gt_deltas)
+    
+    print(f"\n5. Absolute concentration (first 5 steps):")
+    print(f"   TF: {tf_absolute[:5]}")
+    print(f"   AR: {ar_absolute[:5]}")
+    print(f"   GT: {gt_absolute[:5]}")
+    
+    # Calculate MAREs
+    tf_mare = np.abs(tf_absolute - gt_absolute).mean() / (gt_absolute.mean() + 1e-20) * 100
+    ar_mare = np.abs(ar_absolute - gt_absolute).mean() / (gt_absolute.mean() + 1e-20) * 100
+    
+    print(f"\n6. Reconstructed MARE:")
+    print(f"   TF: {tf_mare:.4f}%")
+    print(f"   AR: {ar_mare:.4f}%")
+    
+    return tf_deltas, ar_deltas, gt_deltas

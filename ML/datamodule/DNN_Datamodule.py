@@ -81,6 +81,9 @@ class DNN_Datamodule(L.LightningDataModule):
       X_train, X_val, X_test, y_train, y_val, y_test, self.input_scaler, self.target_scaler
     )
 
+    self.X_test = X_test
+    self.Y_test = y_test
+
     plot.plot_data_distributions(X_train, self.col_index_map, save_dir=self.result_dir, name='Scaled_Inputs')
     plot.plot_data_distributions(y_train, self.target_index_map, save_dir=self.result_dir, name='Scaled_Targets')
     

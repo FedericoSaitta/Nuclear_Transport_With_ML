@@ -373,44 +373,16 @@ def run_optuna_study(base_config, study_name, storage, n_trials, n_jobs, timeout
 
 
 if __name__ == "__main__":
-    # Run the optimization with default settings
-    # Automatically detects and optimizes all isotope features
-
-    study = run_optuna_study(
-        base_config="parameter_tuners/base_simple_chain.yaml",
-        study_name="isotope_DNN_optimization",
-        storage="sqlite:///parameter_tuners/optuna_isotope_study.db",
-        n_trials=1_000,
-        n_jobs=1,
-        timeout=None,
-        load_if_exists=True,  
-        fixed_operational_features=None,
-        optimize_isotope_scaling=True,
-    )
-    
-    # Optional: Generate visualizations
-    try:
-        import optuna.visualization as vis
-        
-        print("\n📊 Generating visualization plots...")
-        
-        # Optimization history
-        fig = vis.plot_optimization_history(study)
-        fig.write_html("chain_optuna_optimization_history.html")
-        
-        # Parameter importance
-        fig = vis.plot_param_importances(study)
-        fig.write_html("chain_optuna_param_importances.html")
-        
-        # Parallel coordinate plot
-        fig = vis.plot_parallel_coordinate(study)
-        fig.write_html("chain_optuna_parallel_coordinate.html")
-        
-        # Slice plot
-        fig = vis.plot_slice(study)
-        fig.write_html("chain_optuna_slice_plot.html")
-        
-        print("✅ Visualization plots saved as HTML files.")
-        
-    except ImportError:
-        print("\n⚠️  Install plotly for visualization: pip install plotly")
+  # Run the optimization with default settings
+  # Automatically detects and optimizes all isotope features
+  study = run_optuna_study(
+    base_config="parameter_tuners/base_simple_chain.yaml",
+    study_name="isotope_DNN_optimization",
+    storage="sqlite:///parameter_tuners/optuna_isotope_study.db",
+    n_trials=1_000,
+    n_jobs=1,
+    timeout=None,
+    load_if_exists=True,  
+    fixed_operational_features=None,
+    optimize_isotope_scaling=True,
+  )

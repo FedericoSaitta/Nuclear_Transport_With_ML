@@ -77,6 +77,38 @@ def train_and_test(datamodule, model, cfg):
       "val_mae": float(val_mae),
   }
 
+
+def load_checkpoint_into_model(model, ckpt_path, save_fixed=True):
+    """
+    Load checkpoint into model while fixing a leading 'model.' prefix.
+    """
+    checkpoint = torch.load(ckpt_path, map_location="cpu", weights_only=True)
+    state_dict = checkpoint.get("state_dict", checkpoint) if isinstance(checkpoint, dict) else checkpoint
+    model_keys = set(model.state_dict().keys())
+    ckpt_keys = set(state_dict.keys())
+    
+    # Fix 'model.' prefix if needed
+    if model_keys == ckpt_keys:
+        new_state_dict = state_dict
+    elif any(k.startswith("model.") for k in model_keys) and not any(k.startswith("model.") for k in ckpt_keys):
+        new_state_dict = {"model." + k: v for k, v in state_dict.items()}
+    elif any(k.startswith("model.") for k in ckpt_keys) and not any(k.startswith("model.") for k in model_keys):
+        new_state_dict = {k.replace("model.", "", 1): v for k, v in state_dict.items()}
+    else:
+        new_state_dict = state_dict
+        # We let the code run which will likely crash as lightning throws an error explaining which keys don't match
+    
+    # Optionally save fixed checkpoint
+    if save_fixed:
+        ckpt_copy = checkpoint.copy() if isinstance(checkpoint, dict) else {"state_dict": new_state_dict}
+        ckpt_copy["state_dict"] = new_state_dict
+        torch.save(ckpt_copy, ckpt_path + ".fixed")
+    
+    # Load strictly
+    model.load_state_dict(new_state_dict, strict=True)
+    return model
+
+
 def train_from_checkpoint_and_test(datamodule, model_class, cfg):
   model_name = cfg.model.name
   result_dir = f'results/{model_name}/'
@@ -114,7 +146,7 @@ def train_from_checkpoint_and_test(datamodule, model_class, cfg):
   
   # 2. Setup datamodule and model (IMPORTANT: do this before loading weights)
   datamodule.setup(stage="fit")  # Use "fit" for training
-  model.setup(stage="fit", datamodule=datamodule)
+  model.setup(stage="fit")
   
   # 3. NOW load the checkpoint weights
   model = load_checkpoint_into_model(model, cfg.runtime.ckp_path, save_fixed=True)
