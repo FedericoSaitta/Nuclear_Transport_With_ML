@@ -1,18 +1,17 @@
-# environment.yml
 name: nuclear-ml
 channels:
   - conda-forge
-  - defaults
 dependencies:
   - python=3.11
   - openmc
   - pytorch
+  - pytorch-lightning
   - numpy
   - pandas
   - matplotlib
   - h5py
+  - optuna
+  - pytest         
   - pip
   - pip:
-    - pytorch-lightning
-    - optuna
-    - -e .  # Install your project in editable mode
+    - -e .
