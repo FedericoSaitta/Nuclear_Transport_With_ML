@@ -25,21 +25,22 @@ jobs:
         id: cache-xs
         uses: actions/cache@v3
         with:
-          path: ~/nndc_hdf5
-          key: openmc-nndc-hdf5-v1
+          path: ~/openmc_data/nndc_hdf5_test
+          key: openmc-test-data-v1
 
-      - name: Download cross sections
+      - name: Download test cross sections
         if: steps.cache-xs.outputs.cache-hit != 'true'
         shell: bash -l {0}
         run: |
-          pip install openmc-data
-          openmc-data download-nndc-chain -d ~/nndc_hdf5 --cleanup
+          # OpenMC has official test data (~30 MB)
+          git clone --depth=1 https://github.com/openmc-dev/data.git ~/openmc_data
+          cd ~/openmc_data
+          tar -xzf nndc_hdf5_test.tar.gz
 
       - name: Set cross sections path
         shell: bash -l {0}
         run: |
-          export OPENMC_CROSS_SECTIONS=~/nndc_hdf5/cross_sections.xml
-          echo "OPENMC_CROSS_SECTIONS=$OPENMC_CROSS_SECTIONS" >> $GITHUB_ENV
+          echo "OPENMC_CROSS_SECTIONS=$HOME/openmc_data/nndc_hdf5_test/cross_sections.xml" >> $GITHUB_ENV
 
       - name: Run pytest
         shell: bash -l {0}
