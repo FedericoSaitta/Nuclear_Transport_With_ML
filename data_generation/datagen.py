@@ -59,12 +59,10 @@ HOUR_IN_SECONDS = 3600
 DAY_IN_SECONDS = 24 * HOUR_IN_SECONDS
 
 def setup_paths(script_dir, worker_id, chain_filename, use_wmp=False):
-  openmc_exec_path = os.path.abspath(os.path.join(script_dir, "../external/openmc/build/bin/openmc"))
   results_dir = os.path.abspath(os.path.join(script_dir, "results", f"worker_{worker_id}"))
   os.makedirs(results_dir, exist_ok=True)
   
   openmc.config['cross_sections'] = os.path.join(script_dir, "../data/cross_sections.xml")
-  os.environ['OPENMC_EXEC'] = openmc_exec_path
   os.environ['HDF5_USE_FILE_LOCKING'] = 'FALSE'
   os.environ['OPENMC_CROSS_SECTIONS'] = str(openmc.config['cross_sections'])
   

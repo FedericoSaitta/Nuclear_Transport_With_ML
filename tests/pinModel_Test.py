@@ -13,7 +13,6 @@ def main():
   # Path for the openmc executable
   script_dir = os.path.dirname(os.path.abspath(__file__))
 
-  openmc_exec_path = os.path.abspath(os.path.join(script_dir, "../external/openmc/build/bin/openmc"))
   results_dir = os.path.abspath(os.path.join(script_dir, "results/" + name))
   openmc.config['cross_sections'] = os.path.join(script_dir, "../data/cross_sections.xml")
 
@@ -115,12 +114,9 @@ def main():
 
   print(">>> Current working directory:", os.getcwd())
   print(">>> Intended OpenMC working directory:", results_dir)
-  print(">>> Full path to openmc executable:", os.path.abspath(openmc_exec_path))
-
 
   # --- Run OpenMC ---
   openmc.run(
-    openmc_exec=openmc_exec_path,
     cwd=results_dir,
     
   )

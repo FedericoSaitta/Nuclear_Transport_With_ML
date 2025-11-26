@@ -10,12 +10,8 @@ def main():
   name = 'Pin_Model_Depletion_Test/'
   script_dir = os.path.dirname(os.path.abspath(__file__))
 
-  openmc_exec_path = os.path.abspath(os.path.join(script_dir, "../external/openmc/build/bin/openmc"))
   results_dir = os.path.abspath(os.path.join(script_dir, "results/" + name))
   os.makedirs(results_dir, exist_ok=True)
-
-  # Path for the openmc executable and configure it
-  os.environ['OPENMC_EXEC'] = openmc_exec_path
   openmc.config['cross_sections'] = os.path.join(script_dir, "../data/cross_sections.xml")
   chain_file = os.path.join(script_dir, "../data/chain_casl_pwr.xml")
 

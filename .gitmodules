@@ -1,3 +1,0 @@
-[submodule "external/openmc"]
-	path = external/openmc
-	url = https://github.com/openmc-dev/openmc.git
