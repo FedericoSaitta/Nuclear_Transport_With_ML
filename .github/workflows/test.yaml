@@ -1,0 +1,44 @@
+name: Tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Conda
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          auto-update-conda: true
+          python-version: '3.11'
+          channels: conda-forge
+
+      - name: Install OpenMC
+        shell: bash -l {0}
+        run: |
+          conda install openmc -y
+      
+      - name: Cache pip packages
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('pyproject.toml') }}
+      
+      - name: Install project dependencies
+        shell: bash -l {0}
+        run: |
+          pip install pytest
+          pip install -e .
+      
+      - name: Run pytest
+        shell: bash -l {0}
+        run: |
+          pytest tests/test.py -v
