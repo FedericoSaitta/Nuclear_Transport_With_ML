@@ -21,41 +21,7 @@ jobs:
           environment-file: environment.yml
           activate-environment: nuclear-ml
 
-      - name: Cache cross sections
-        id: cache-xs
-        uses: actions/cache@v3
-        with:
-          path: ~/openmc_data
-          key: openmc-minimal-nndc-v1
-
-      - name: Download minimal cross sections
-        if: steps.cache-xs.outputs.cache-hit != 'true'
-        shell: bash -l {0}
-        run: |
-          pip install openmc-data
-          
-          python << 'PYEOF'
-          from openmc_data import download_nndc_chain
-          import os
-          
-          dest = os.path.expanduser('~/openmc_data')
-          nuclides = ['U235', 'U238', 'O16', 'H1', 'Zr90', 'Zr91', 'Zr92', 'Zr94', 'Zr96']
-          
-          download_nndc_chain(
-              destination=dest,
-              particles=['neutron'],
-              nuclides=nuclides,
-              cleanup=True
-          )
-          print("✅ Minimal cross sections downloaded!")
-          PYEOF
-
-      - name: Set cross sections path
-        shell: bash -l {0}
-        run: |
-          echo "OPENMC_CROSS_SECTIONS=$HOME/openmc_data/cross_sections.xml" >> $GITHUB_ENV
-
       - name: Run pytest
         shell: bash -l {0}
         run: |
-          pytest tests/test.py -v -s
+          pytest tests/test.py -v
