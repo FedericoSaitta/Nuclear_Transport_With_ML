@@ -499,3 +499,6 @@ def plot_error_growth_metric(avg_tf_error, avg_ar_error, std_tf_error, std_ar_er
       plt.close()
       
       print(f"{metric_name} growth plot ({scale_type} scale) saved: {filename}")
+
+      if scale_type == 'linear':
+        logger.info(f"{metric_name} growth plot saved: {filename}, Last value: {avg_ar_error[-1]}")
