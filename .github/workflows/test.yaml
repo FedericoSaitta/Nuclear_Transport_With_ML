@@ -20,9 +20,28 @@ jobs:
           auto-update-conda: true
           environment-file: environment.yml
           activate-environment: nuclear-ml
-          channels: conda-forge
+
+      - name: Cache cross sections
+        id: cache-xs
+        uses: actions/cache@v3
+        with:
+          path: ~/nndc_hdf5
+          key: openmc-nndc-hdf5-v1
+
+      - name: Download cross sections
+        if: steps.cache-xs.outputs.cache-hit != 'true'
+        shell: bash -l {0}
+        run: |
+          pip install openmc-data
+          openmc-data download-nndc-chain -d ~/nndc_hdf5 --cleanup
+
+      - name: Set cross sections path
+        shell: bash -l {0}
+        run: |
+          export OPENMC_CROSS_SECTIONS=~/nndc_hdf5/cross_sections.xml
+          echo "OPENMC_CROSS_SECTIONS=$OPENMC_CROSS_SECTIONS" >> $GITHUB_ENV
 
       - name: Run pytest
         shell: bash -l {0}
         run: |
-          pytest tests/test.py -v
+          pytest tests/test.py -v -s
