@@ -72,9 +72,9 @@ def train_and_test(datamodule, model, cfg):
   
   # Return the saved validation metrics (not overwritten by test)
   return {
-      "val_r2": float(val_r2),
-      "val_loss": float(val_loss),
-      "val_mae": float(val_mae),
+    "val_r2": float(val_r2),
+    "val_loss": float(val_loss),
+    "val_mae": float(val_mae),
   }
 
 

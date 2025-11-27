@@ -5,11 +5,9 @@ import torch.nn as nn
 import numpy as np
 
 # === External libraries ===
-from omegaconf import DictConfig
 from loguru import logger
 import lightning as L
 from torch.optim.lr_scheduler import ReduceLROnPlateau
-from torchmetrics import R2Score, MeanAbsoluteError
 from sklearn.metrics import r2_score, mean_absolute_error
 
 from ML.utils import plot
@@ -233,7 +231,7 @@ class DNN_Model(L.LightningModule):
           train_losses=self.train_losses,
           val_losses=self.val_losses,
           val_r2_scores=self.val_r2_scores,
-          val_mae_scores=self.val_mae_scores,  # Add this
+          val_mae_scores=self.val_mae_scores,
           test_metrics=test_metrics
       )
         
@@ -264,13 +262,6 @@ class DNN_Model(L.LightningModule):
     rmse_per_output = metrics.rmse(y_true, y_pred)
     r2_per_output = metrics.r2(y_true, y_pred)
     
-    logger.info(f"\n{'='*20}")
-    logger.info(f"OVERALL METRICS (averaged across {len(target_names)} outputs)")
-    logger.info(f"{'='*20}")
-    logger.info(f"Overall MAE: {mae_per_output.mean():.4f}")
-    logger.info(f"Overall RMSE: {rmse_per_output.mean():.4f}")
-    logger.info(f"Overall R²: {r2_per_output.mean():.4f}")
-    
     self.log('Mean Absolute Error (avg)', float(mae_per_output.mean()))
     self.log('Root Mean Squared Error (avg)', float(rmse_per_output.mean()))
     self.log('R-squared coefficient (avg)', float(r2_per_output.mean()))
@@ -281,13 +272,6 @@ class DNN_Model(L.LightningModule):
     """Process and visualize results for a single output."""
     output_dir = os.path.join(self.result_dir, target_name)
     os.makedirs(output_dir, exist_ok=True)
-    
-    logger.info(f"\n{'='*20}")
-    logger.info(f"Output {idx+1}: {target_name}")
-    logger.info(f"{'='*20}")
-    logger.info(f"MAE:  {mae_output:.6f}")
-    logger.info(f"RMSE: {rmse_output:.6f}")
-    logger.info(f"R²:   {r2_output:.6f}")
     
     # Generate plots
     plot.plot_predictions_vs_actuals(y_true, y_pred, mae_output, rmse_output, r2_output, output_dir)
@@ -404,10 +388,6 @@ class DNN_Model(L.LightningModule):
         # Calculate MARE on absolute concentrations
         mare_tf = metrics.mare(tf_gt, tf_pred)
         mare_ar = metrics.mare(ar_gt, ar_pred)
-        
-        logger.info(f"\n{target_name}:")
-        logger.info(f"  MARE (Teacher-Forcing): {mare_tf:.6f}")
-        logger.info(f"  MARE (Autoregressive):  {mare_ar:.6f}")
         
         self.log(f'{target_name}/MARE_TeacherForcing', float(mare_tf))
         self.log(f'{target_name}/MARE_Autoregressive', float(mare_ar))
@@ -625,25 +605,9 @@ class DNN_Model(L.LightningModule):
         std_tf_male = np.std(tf_male_errors, axis=0)
         std_ar_male = np.std(ar_male_errors, axis=0)
         
-        # RMSE (take sqrt after averaging)
-        avg_tf_rmse = np.sqrt(np.mean(tf_rmse_errors, axis=0))
-        avg_ar_rmse = np.sqrt(np.mean(ar_rmse_errors, axis=0))
-        std_tf_rmse = np.std(np.sqrt(tf_rmse_errors), axis=0)
-        std_ar_rmse = np.std(np.sqrt(ar_rmse_errors), axis=0)
-        
-        # Log summary statistics
-        logger.info(f"\n{'='*60}")
-        logger.info(f"ERROR METRICS SUMMARY - {target_name}")
-        logger.info(f"{'='*60}")
-        logger.info(f"Mean Absolute Error (MAE):")
-        logger.info(f"  TF: Initial={avg_tf_mae[0]:.2e}, Final={avg_tf_mae[-1]:.2e}")
-        logger.info(f"  AR: Initial={avg_ar_mae[0]:.2e}, Final={avg_ar_mae[-1]:.2e}")
-        logger.info(f"\nMean Absolute Log Error (MALE):")
-        logger.info(f"  TF: Initial={avg_tf_male[0]:.3f}, Final={avg_tf_male[-1]:.3f}")
-        logger.info(f"  AR: Initial={avg_ar_male[0]:.3f}, Final={avg_ar_male[-1]:.3f}")
-        logger.info(f"\nRoot Mean Squared Error (RMSE):")
-        logger.info(f"  TF: Initial={avg_tf_rmse[0]:.2e}, Final={avg_tf_rmse[-1]:.2e}")
-        logger.info(f"  AR: Initial={avg_ar_rmse[0]:.2e}, Final={avg_ar_rmse[-1]:.2e}")
+        # Logging the final MALE value
+        self.log(str(target_name) + '/Final MALE (AR)', float(avg_ar_male[-1]))
+        self.log(str(target_name) + '/Final MALE (TF)', float(avg_tf_male[-1]))
         
         # Save plots
         output_dir = os.path.join(self.result_dir, target_name)
@@ -672,18 +636,6 @@ class DNN_Model(L.LightningModule):
             ar_errors_all=ar_male_errors   # ← Pass raw data
         )
 
-        # Plot 3: RMSE over time
-        plot.plot_error_growth_metric(
-            avg_tf_rmse, avg_ar_rmse,
-            std_tf_rmse, std_ar_rmse,
-            target_name, output_dir, num_runs,
-            metric_name='RMSE',
-            ylabel='Root Mean Squared Error',
-            skip_first_n=0,
-            tf_errors_all=np.sqrt(tf_rmse_errors),  # ← Take sqrt first
-            ar_errors_all=np.sqrt(ar_rmse_errors)   # ← Take sqrt first
-        )
-        
         logger.info(f"  ✓ Error growth plots saved to: {output_dir}")
 
   def _init_tracking_variables(self):

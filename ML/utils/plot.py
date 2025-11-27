@@ -273,15 +273,6 @@ def plot_residuals_combined(actuals, predictions, plots_folder):
                             fontsize=14)
             axes[1].grid(True, which='both', alpha=0.3)
             
-            # Add diagnostics
-            print(f"\n  === LOG-LOG FILTERING DIAGNOSTICS ===")
-            print(f"  Total points: {len(predictions)}")
-            print(f"  |Predictions| > 0: {np.sum(mask_nonzero_pred)}")
-            print(f"  |Residuals| > 0: {np.sum(mask_nonzero_res)}")
-            print(f"  Valid for log-log: {np.sum(mask_combined)}")
-            print(f"  Positive predictions: {n_pos}")
-            print(f"  Negative predictions: {n_neg}")
-            print(f"  Filtered out: {len(predictions) - np.sum(mask_combined)}")
         else:
             axes[1].text(0.5, 0.5, 'No non-zero residuals to plot', 
                         ha='center', va='center', transform=axes[1].transAxes)
@@ -499,7 +490,3 @@ def plot_error_growth_metric(avg_tf_error, avg_ar_error, std_tf_error, std_ar_er
       plt.close()
       
       print(f"{metric_name} growth plot ({scale_type} scale) saved: {filename}")
-
-      if scale_type == 'linear':
-        logger.info(f"{metric_name} growth plot saved: {filename}, Last value: {avg_ar_error[-1]}")
-        logger.info(f"{metric_name} growth plot saved: {filename}, Last value: {avg_tf_error[-1]}")

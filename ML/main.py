@@ -10,7 +10,7 @@ if __name__ == "__main__":
   # Allow use of tensor cores if present
   torch.set_float32_matmul_precision('high')
  
-  cfg = OmegaConf.load("test_config.yaml")
+  cfg = OmegaConf.load("main_config.yaml")
   datamodule = DNN_Datamodule.DNN_Datamodule(cfg)
   lightning_mode = cfg.runtime.mode
 
