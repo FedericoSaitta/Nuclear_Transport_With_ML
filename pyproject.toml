@@ -5,18 +5,18 @@ description = "Nuclear Transport and ML package"
 authors = [{ name = "Abel Castaneda Rodriguez and Federico Saitta" }]
 requires-python = ">=3.9"
 dependencies = [
-    "scikit-learn",
-    "matplotlib",
-    "seaborn",
-    "pandas",
-    "numpy",
-    "torch",
-    "pytorch-lightning",
-    "omegaconf",
-    "loguru",
-    "tqdm",  # Fixed typo: was "tdqm"
-    "polars",
-    "h5py",
+  "scikit-learn",
+  "matplotlib",
+  "seaborn",
+  "pandas",
+  "numpy",
+  "torch",
+  "pytorch-lightning",
+  "omegaconf",
+  "loguru",
+  "tqdm", 
+  "polars",
+  "h5py",
 ]
 
 [build-system]

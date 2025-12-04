@@ -8,6 +8,67 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../util
 
 import plot_helper
 
+def plot_neutron_spectrum(sp, results_dir):
+  """Plot the neutron energy spectrum"""
+  # Get the spectrum tally
+  spectrum_tally = sp.get_tally(name='neutron_spectrum')
+  
+  # Extract flux values and energy bins
+  flux = spectrum_tally.mean.flatten()
+  energy_bins = spectrum_tally.filters[1].bins  # Energy filter bins
+  
+  # Calculate bin centers for plotting
+  energy_centers = np.sqrt(energy_bins[:-1] * energy_bins[1:])  # Geometric mean
+  
+  # Calculate lethargy width for per-lethargy flux
+  lethargy_width = np.log(energy_bins[1:] / energy_bins[:-1])
+  flux_per_lethargy = flux / lethargy_width
+  
+  # Create figure with two subplots
+  fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
+  
+  # Plot 1: Standard flux vs energy
+  ax1.loglog(energy_centers, flux, 'b-', linewidth=2)
+  ax1.set_xlabel('Energy (eV)', fontsize=12)
+  ax1.set_ylabel('Flux (n/cm²-s)', fontsize=12)
+  ax1.set_title('Neutron Energy Spectrum', fontsize=14, fontweight='bold')
+  ax1.grid(True, alpha=0.3, which='both')
+  
+  # Add typical energy region labels
+  ax1.axvspan(0, 0.625, alpha=0.2, color='blue', label='Thermal (<0.625 eV)')
+  ax1.axvspan(0.625, 1e5, alpha=0.2, color='green', label='Epithermal (0.625 eV - 100 keV)')
+  ax1.axvspan(1e5, 1e7, alpha=0.2, color='red', label='Fast (>100 keV)')
+  ax1.legend(loc='best', fontsize=10)
+  
+  # Plot 2: Flux per unit lethargy (flattens the spectrum)
+  ax2.semilogx(energy_centers, flux_per_lethargy, 'r-', linewidth=2)
+  ax2.set_xlabel('Energy (eV)', fontsize=12)
+  ax2.set_ylabel('Flux per unit lethargy', fontsize=12)
+  ax2.set_title('Neutron Spectrum (per unit lethargy)', fontsize=14, fontweight='bold')
+  ax2.grid(True, alpha=0.3)
+  
+  plt.tight_layout()
+  plt.savefig(os.path.join(results_dir, 'neutron_spectrum.png'), dpi=300, bbox_inches='tight')
+  plt.close()
+  
+  print(f"Neutron spectrum saved to {os.path.join(results_dir, 'neutron_spectrum.png')}")
+  
+  # Print some statistics
+  thermal_idx = energy_centers < 0.625
+  epithermal_idx = (energy_centers >= 0.625) & (energy_centers < 1e5)
+  fast_idx = energy_centers >= 1e5
+  
+  thermal_fraction = flux[thermal_idx].sum() / flux.sum()
+  epithermal_fraction = flux[epithermal_idx].sum() / flux.sum()
+  fast_fraction = flux[fast_idx].sum() / flux.sum()
+  
+  print("\n=== Neutron Spectrum Statistics ===")
+  print(f"Thermal fraction (<0.625 eV): {thermal_fraction*100:.2f}%")
+  print(f"Epithermal fraction (0.625 eV - 100 keV): {epithermal_fraction*100:.2f}%")
+  print(f"Fast fraction (>100 keV): {fast_fraction*100:.2f}%")
+  print(f"Average energy: {np.average(energy_centers, weights=flux):.2f} eV")
+
+
 def main():
   name = 'Pin_Model_Test'
   # Path for the openmc executable
@@ -98,12 +159,24 @@ def main():
 
   # --- Tallies ---
   cell_filter = openmc.CellFilter(fuel)
+
+  # Create energy bins for spectrum (logarithmic spacing is typical)
+  # From thermal (0.001 eV) to fast (20 MeV)
+  energy_bins = np.logspace(-3, 7, 200)  # 200 bins from 0.001 eV to 10 MeV
+  energy_filter = openmc.EnergyFilter(energy_bins)
+
+  # Flux tally with energy filter for spectrum
+  spectrum_tally = openmc.Tally(name='neutron_spectrum')
+  spectrum_tally.filters = [cell_filter, energy_filter]
+  spectrum_tally.scores = ['flux']
+
+  # Your original tally
   tally = openmc.Tally(name='fuel_tally')
   tally.filters = [cell_filter]
   tally.nuclides = ['U235']
   tally.scores = ['total', 'fission', 'absorption', '(n,gamma)']
 
-  tallies = openmc.Tallies([tally])
+  tallies = openmc.Tallies([tally, spectrum_tally])
 
 
   materials.export_to_xml(path=results_dir)
@@ -134,5 +207,8 @@ def main():
   kvals = [k for k in sp.k_generation]
   plot_helper.K_Effective(batches, kvals, save_path=os.path.join(results_dir, "keff_vs_batch.png"))
 
+  # Plot neutron spectrum
+  plot_neutron_spectrum(sp, results_dir)
+  
 if __name__ == "__main__":
   main()
