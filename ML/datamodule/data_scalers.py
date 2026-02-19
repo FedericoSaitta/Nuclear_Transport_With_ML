@@ -46,7 +46,7 @@ def create_scaler_dict(config_dict):
   scaler_dict = {}
   
   for key, value in config_dict.items():
-      scaler_dict[key] = get_scaler(value)
+    scaler_dict[key] = get_scaler(value)
   
   return scaler_dict
 
@@ -109,7 +109,6 @@ def create_column_transformer(scaler_dict, col_index_map):
 def inverse_transformer(column_transformer, X):
   # Handle single scaler (not a ColumnTransformer)
   if not isinstance(column_transformer, ColumnTransformer):
-    # It's a single scaler
     return column_transformer.inverse_transform(X)
   
   # Handle ColumnTransformer
@@ -129,7 +128,6 @@ def inverse_transformer(column_transformer, X):
       col_data_original = transformer.inverse_transform(col_data)
       X_original[:, col_indices] = col_data_original # Put back in array
     else: 
-      logger.error(f"Could not compute inverse transform for col {columns} with {name} scaler")
       raise ValueError(f"Could not compute inverse transform for col {columns} with {name} scaler")
 
   return X_original

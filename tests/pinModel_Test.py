@@ -15,7 +15,11 @@ def plot_neutron_spectrum(sp, results_dir):
   
   # Extract flux values and energy bins
   flux = spectrum_tally.mean.flatten()
-  energy_bins = spectrum_tally.filters[1].bins  # Energy filter bins
+  
+  # Get the energy filter and its bins correctly
+  energy_filter = spectrum_tally.filters[1]
+  # The bins attribute gives you the bin edges as a 1D array
+  energy_bins = energy_filter.values  # Use .values instead of .bins
   
   # Calculate bin centers for plotting
   energy_centers = np.sqrt(energy_bins[:-1] * energy_bins[1:])  # Geometric mean
@@ -25,7 +29,7 @@ def plot_neutron_spectrum(sp, results_dir):
   flux_per_lethargy = flux / lethargy_width
   
   # Create figure with two subplots
-  fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
+  fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(13, 5))
   
   # Plot 1: Standard flux vs energy
   ax1.loglog(energy_centers, flux, 'b-', linewidth=2)
@@ -39,14 +43,26 @@ def plot_neutron_spectrum(sp, results_dir):
   ax1.axvspan(0.625, 1e5, alpha=0.2, color='green', label='Epithermal (0.625 eV - 100 keV)')
   ax1.axvspan(1e5, 1e7, alpha=0.2, color='red', label='Fast (>100 keV)')
   ax1.legend(loc='best', fontsize=10)
-  
-  # Plot 2: Flux per unit lethargy (flattens the spectrum)
+    
   ax2.semilogx(energy_centers, flux_per_lethargy, 'r-', linewidth=2)
-  ax2.set_xlabel('Energy (eV)', fontsize=12)
-  ax2.set_ylabel('Flux per unit lethargy', fontsize=12)
-  ax2.set_title('Neutron Spectrum (per unit lethargy)', fontsize=14, fontweight='bold')
+  ax2.set_xlabel('Energy (eV)', fontsize=15)
+  ax2.set_ylabel('Flux per unit lethargy', fontsize=15)
+  ax2.set_title('Neutron Spectrum (per unit lethargy)', fontsize=18, fontweight='bold')
+
+  # <<< Increase tick number sizes >>>
+  ax2.tick_params(axis='both', which='major', labelsize=14)
+  ax2.tick_params(axis='both', which='minor', labelsize=12)
+
   ax2.grid(True, alpha=0.3)
-  
+  from matplotlib.ticker import LogLocator
+
+  ax2.set_xscale('log')
+  ax2.xaxis.set_major_locator(LogLocator(base=10.0, numticks=100))
+  ax2.axvspan(0, 0.625, alpha=0.2, color='blue', label='Thermal (<0.625 eV)')
+  ax2.axvspan(0.625, 1e5, alpha=0.2, color='green', label='Epithermal (0.625 eV - 100 keV)')
+  ax2.axvspan(1e5, 1e7, alpha=0.2, color='red', label='Fast (>100 keV)')
+  ax2.legend(loc='best', fontsize=14)
+
   plt.tight_layout()
   plt.savefig(os.path.join(results_dir, 'neutron_spectrum.png'), dpi=300, bbox_inches='tight')
   plt.close()
@@ -99,6 +115,9 @@ def main():
   water.add_nuclide('O16', 1.0)
   water.set_density('g/cm3', 1.0)
   water.add_s_alpha_beta('c_H_in_H2O')
+
+
+  print(f"Water thermal scattering: {water.get_nuclides()}") 
   # add_s_alpha_beta: adds scattering data to the moderator, hydrogen in bound molecules behaves very 
   # differently from free hydrogen, WITHOUT THIS NEUTRNOS WILL NOT MODERATE PROPERLY
 
@@ -144,7 +163,7 @@ def main():
   settings = openmc.Settings(path=results_dir)
   settings.source = source
   settings.batches = 100
-  settings.inactive = 0
+  settings.inactive = 50
   settings.particles = 10_000
 
   m = openmc.RegularMesh()
@@ -178,7 +197,6 @@ def main():
 
   tallies = openmc.Tallies([tally, spectrum_tally])
 
-
   materials.export_to_xml(path=results_dir)
   geometry.export_to_xml(path=results_dir)
   settings.export_to_xml(path=results_dir)
@@ -191,11 +209,11 @@ def main():
   # --- Run OpenMC ---
   openmc.run(
     cwd=results_dir,
-    
-  )
+    output=True  # This will show more detailed output
+)
 
-  sp_path = '/home/t97807fs/Nuclear_Transport_With_ML/test/results/Pin_Model_Test/statepoint.100.h5'
-
+  # With this:
+  sp_path = os.path.join(results_dir, 'statepoint.100.h5')
   sp = openmc.StatePoint(sp_path)
 
   entropy = sp.entropy  # list of entropy values per active batch

@@ -18,7 +18,8 @@ Makefile
 *.db
 *.egg-info
 *.vs
-*.sh
+run_datagen.sh
+ML/submit_gpu_job.sh
 *.ckpt
 *.err 
 *.html

@@ -47,6 +47,7 @@ train:
   drop_last: false
 runtime:
   mode: train
+  model: DNN
   ckp_path: results/SimpleDNN/best-SimpleDNN-epoch=397.ckpt
   device: cuda
   seed: 42

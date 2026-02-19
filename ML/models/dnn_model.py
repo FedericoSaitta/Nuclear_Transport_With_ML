@@ -13,8 +13,8 @@ from sklearn.metrics import r2_score, mean_absolute_error
 from ML.utils import plot
 from ML.utils import metrics
 import ML.datamodule.data_scalers as data_scaler
-from ML.models.ModelArchitectures import SimpleDNN
-from ML.models.Model_helper import get_loss_fn
+from ML.models.model_architectures import Deep_Neural_Network
+from ML.models.model_helper import get_loss_fn
 
 
 class DNN_Model(L.LightningModule):
@@ -46,17 +46,11 @@ class DNN_Model(L.LightningModule):
 
     # Results
     self.result_dir = 'results/' + config_object.model.name + '/'
-    self._has_setup = False
 
-  # Gets called after datamodule has setup
-  def setup(self, stage=None):
-    # Avoiding setting up again if we have already done so
-    if self._has_setup: return
-    self._has_setup = True
     
     # Creating the model
-    self.model = SimpleDNN(self.n_inputs, self.n_outputs, self.NN_layers, self.dropout_prob, self.activation, self.output_activation, self.residual_connections)
-
+    self.model = Deep_Neural_Network(self.n_inputs, self.n_outputs, self.NN_layers, self.dropout_prob, self.activation, self.output_activation, self.residual_connections)
+    
   # Gets called for each train batch
   def training_step(self, batch, batch_idx):
     x, y = batch
@@ -184,22 +178,6 @@ class DNN_Model(L.LightningModule):
       y_true_test, y_pred_test, target_names, datamodule,
       per_target_metrics  # Pass to add MARE values
     )
-
-    #
-    # logger.info(f'\n{"="*60}')
-    # logger.info('Running diagnostic for all targets')
-    # logger.info(f'{"="*60}')
-    
-    # for idx, target_name in enumerate(target_names):
-    #     # ✅ CORRECT: No 'self' parameter, use test_data
-    #     self.debug_prediction_comparison(
-    #        idx, target_name, datamodule, 
-    #        test_data['inputs'],           # ✅ Use prepared data
-    #        test_data['targets_scaled'],   # ✅ Use prepared data
-    #        y_pred_test, 
-    #       ar_preds_dict, ar_truth_dict, steps_per_run
-    #   )
-    
     
     # 4. Feature importance
     self._compute_feature_importance(
@@ -651,70 +629,3 @@ class DNN_Model(L.LightningModule):
     # For manual R² calculation
     self.val_preds_epoch = []
     self.val_targets_epoch = []
-
-  def debug_prediction_comparison(self, idx, target_name, datamodule, X_test, Y_test, y_pred_test, 
-                                ar_predictions_dict, ar_ground_truth_dict, steps_per_run):
-    """Debug why teacher-forcing is worse than autoregressive."""
-    
-    print(f"\n{'='*60}")
-    print(f"DEBUGGING {target_name}")
-    print(f"{'='*60}")
-    
-    # Get first run data
-    first_run = slice(0, steps_per_run)
-    tf_deltas = y_pred_test[first_run, idx] if y_pred_test.ndim > 1 else y_pred_test[first_run]
-    ar_deltas = ar_predictions_dict[target_name][first_run]
-    gt_deltas = ar_ground_truth_dict[target_name][first_run]
-    
-    print(f"\n1. Delta Statistics (first 10 steps):")
-    print(f"   TF deltas:  {tf_deltas[:10]}")
-    print(f"   AR deltas:  {ar_deltas[:10]}")
-    print(f"   GT deltas:  {gt_deltas[:10]}")
-    
-    # Check if deltas match ground truth
-    tf_delta_error = np.abs(tf_deltas - gt_deltas).mean()
-    ar_delta_error = np.abs(ar_deltas - gt_deltas).mean()
-    print(f"\n2. Mean Absolute Delta Error:")
-    print(f"   TF: {tf_delta_error:.2e}")
-    print(f"   AR: {ar_delta_error:.2e}")
-    
-    # Check initial concentration
-    X_first = data_scaler.inverse_transformer(
-        datamodule.input_scaler, X_test[0].reshape(1, -1)
-    )[0]
-    
-    if target_name in datamodule.col_index_map:
-        initial_from_input = X_first[datamodule.col_index_map[target_name]]
-        print(f"\n3. Initial concentration from X_test[0]: {initial_from_input:.6e}")
-    else:
-        print(f"\n3. ⚠️ {target_name} NOT in inputs - cannot extract initial concentration!")
-        initial_from_input = 0.0
-    
-    # Check ground truth reconstruction
-    Y_test_unscaled = data_scaler.inverse_transformer(datamodule.target_scaler, Y_test)
-    gt_from_Y = Y_test_unscaled[first_run, idx]
-    
-    print(f"\n4. Ground truth delta comparison:")
-    print(f"   From ar_ground_truth: {gt_deltas[:5]}")
-    print(f"   From Y_test_unscaled: {gt_from_Y[:5]}")
-    print(f"   Match: {np.allclose(gt_deltas, gt_from_Y)}")
-    
-    # Reconstruct absolute concentrations
-    tf_absolute = initial_from_input + np.cumsum(tf_deltas)
-    ar_absolute = initial_from_input + np.cumsum(ar_deltas)
-    gt_absolute = initial_from_input + np.cumsum(gt_deltas)
-    
-    print(f"\n5. Absolute concentration (first 5 steps):")
-    print(f"   TF: {tf_absolute[:5]}")
-    print(f"   AR: {ar_absolute[:5]}")
-    print(f"   GT: {gt_absolute[:5]}")
-    
-    # Calculate MAREs
-    tf_mare = np.abs(tf_absolute - gt_absolute).mean() / (gt_absolute.mean() + 1e-20) * 100
-    ar_mare = np.abs(ar_absolute - gt_absolute).mean() / (gt_absolute.mean() + 1e-20) * 100
-    
-    print(f"\n6. Reconstructed MARE:")
-    print(f"   TF: {tf_mare:.4f}%")
-    print(f"   AR: {ar_mare:.4f}%")
-    
-    return tf_deltas, ar_deltas, gt_deltas

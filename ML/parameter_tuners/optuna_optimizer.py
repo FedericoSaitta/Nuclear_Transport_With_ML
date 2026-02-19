@@ -13,8 +13,8 @@ import math
 import re
 
 # Personal imports
-import ML.datamodule.DNN_Datamodule as DNN_Datamodule
-import ML.models.DNN_Model as DNN_Model
+import ML.datamodule.dnn_datamodule as dnn_datamodule
+import ML.models.dnn_model as dnn_model
 import ML.models.modes as modes
 
 from ML.parameter_tuners.sweeper import ConfigSweeper
@@ -193,10 +193,10 @@ class OptunaObjective:
         
         try:
             # Create datamodule
-            datamodule = DNN_Datamodule.DNN_Datamodule(cfg)
+            datamodule = dnn_datamodule.DNN_Datamodule(cfg)
             
             # Train and get results
-            results = modes.train_and_test(datamodule, DNN_Model.DNN_Model, cfg)
+            results = modes.train_and_test(datamodule, dnn_model.DNN_Model, cfg)
             
             # Extract R² metric
             if isinstance(results, dict):

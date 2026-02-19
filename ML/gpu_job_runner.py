@@ -5,17 +5,17 @@ from pathlib import Path
 # Set the global variables needed for the job submission
 CPUS = 12
 GPUS = 1
-EMAIL = 'abel.castanedarodriguez@student.manchester.ac.uk'
+EMAIL = 'federico.saitta@student.manchester.ac.uk'
 
 # federico.saitta@student.manchester.ac.uk
 # abel.castanedarodriguez@student.manchester.ac.uk
 
 # Additional configuration
 PARTITION = 'gpuL'  # Options: 'gpuA', 'gpuA40GB', 'gpuL'
-WALLTIME = '4-0'    # 1 day (format: days-hours)
+WALLTIME = '0-1'    # 1 day (format: days-hours)
 JOB_NAME = 'gpu_job'
 CUDA_VERSION = '11.8.0'  # Update this to an available version
-PYTHON_SCRIPT = 'sweep_train.py'
+PYTHON_SCRIPT = 'main.py'
 
 def create_slurm_script(output_file='submit_gpu_job.sh'):
   """Generate a Slurm job submission script."""
@@ -31,6 +31,8 @@ def create_slurm_script(output_file='submit_gpu_job.sh'):
 #SBATCH -o logs/job_%j.out                # Standard output log
 #SBATCH -e logs/job_%j.err                # Standard error log
 
+conda activate nuclear-ml
+
 # Run your Python script
 python {PYTHON_SCRIPT}
 """
@@ -40,7 +42,7 @@ python {PYTHON_SCRIPT}
   
   # Write the script to file
   with open(output_file, 'w') as f:
-      f.write(slurm_script)
+    f.write(slurm_script)
   
   # Make the script executable
   os.chmod(output_file, 0o755)
@@ -53,10 +55,10 @@ def submit_job(script_file):
   """Submit the job to Slurm."""
   try:
     result = subprocess.run(
-        ['sbatch', script_file],
-        capture_output=True,
-        text=True,
-        check=True
+      ['sbatch', script_file],
+      capture_output=True,
+      text=True,
+      check=True
     )
     print(f"Job submitted successfully!")
     print(result.stdout)
@@ -91,9 +93,9 @@ def main():
   response = input("Do you want to submit this job? (yes/no): ").lower()
   
   if response in ['yes', 'y']:
-      submit_job(script_file)
+    submit_job(script_file)
   else:
-      print(f"Job not submitted. You can manually submit with: sbatch {script_file}")
+    print(f"Job not submitted. You can manually submit with: sbatch {script_file}")
 
 
 if __name__ == '__main__':

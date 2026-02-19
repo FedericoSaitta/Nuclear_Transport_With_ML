@@ -4,8 +4,8 @@ from omegaconf import OmegaConf
 import torch
 
 # Personal imports (same as your main)
-import ML.datamodule.DNN_Datamodule as DNN_Datamodule
-import ML.models.DNN_Model as DNN_Model
+import ML.datamodule.dnn_datamodule as dnn_datamodule
+import ML.models.dnn_model as dnn_model
 import ML.models.modes as modes
 
 from ML.parameter_tuners.sweeper import ConfigSweeper
@@ -49,6 +49,6 @@ if __name__ == "__main__":
         cfg.model.name = f"run_{run_id}"
 
         # build datamodule + train
-        datamodule = DNN_Datamodule.DNN_Datamodule(cfg)
-        modes.train_and_test(datamodule, DNN_Model.DNN_Model, cfg)
+        datamodule = dnn_datamodule.DNN_Datamodule(cfg)
+        modes.train_and_test(datamodule, dnn_model.DNN_Model, cfg)
         

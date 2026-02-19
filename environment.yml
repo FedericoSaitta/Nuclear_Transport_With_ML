@@ -5,12 +5,19 @@ dependencies:
   - python=3.11
   - openmc
   - pytorch
-  - pytorch-lightning
+  - lightning
+  - torchdiffeq
   - numpy
   - pandas
   - matplotlib
   - h5py
   - optuna
+  - polars 
+  - scikit-learn
+  - seaborn
+  - omegaconf
+  - loguru
+  - tdqm
   - pytest         
   - pip
   - pip:

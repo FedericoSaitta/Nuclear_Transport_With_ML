@@ -1,9 +1,9 @@
 import torch.nn as nn
-from ML.models.Model_helper import get_activation
+from ML.models.model_helper import get_activation
 
-class SimpleDNN(nn.Module):
+class Deep_Neural_Network(nn.Module):
   def __init__(self, n_inputs, n_outputs, hidden_layers, dropout_prob, activation, output_activation, residual):
-    super(SimpleDNN, self).__init__()
+    super(Deep_Neural_Network, self).__init__()
     self.residual = residual
 
     layer_sizes = [n_inputs] + hidden_layers + [n_outputs]
