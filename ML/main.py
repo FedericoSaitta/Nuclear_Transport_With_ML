@@ -16,12 +16,8 @@ if __name__ == "__main__":
   datamodule = dnn_datamodule.DNN_Datamodule(cfg)
 
 
-  if cfg.runtime.model == 'DNN': 
-    model = DNN_Model
-  elif cfg.runtime.model == 'NODE': 
-    model = NODE_Model
+  if cfg.runtime.model == 'DNN': model = DNN_Model
+  elif cfg.runtime.model == 'NODE': model = NODE_Model
 
-  if (lightning_mode == 'train'):
-    modes.train_and_test(datamodule, model, cfg)
-  elif (lightning_mode == 'train_from_ckp'):
-    modes.train_from_checkpoint_and_test(datamodule, model, cfg)
+  if (lightning_mode == 'train'): modes.train_and_test(datamodule, model, cfg)
+  elif (lightning_mode == 'train_from_ckp'): modes.train_from_checkpoint_and_test(datamodule, model, cfg)
