@@ -299,6 +299,7 @@ def main():
     all_trajectories = reshape_to_trajectories(scaled_data, steps_per_run)
 
     # Drop last timestep (NaN power at final step)
+    # Note: this means the model is trained to predict up to t=100, not t=101, but that's fine since the last power value is missing.
     all_trajectories = all_trajectories[:, :-1, :]
     actual_steps = steps_per_run - 1
 
@@ -325,6 +326,8 @@ def main():
 
     # ── Move full splits to device once ──
     # All subsequent tensor operations happen on-device; no per-sample transfers.
+    # make sure to keep the full trajectories on device for efficient batch processing in the ODE solver.
+    
     train_trajs = train_trajs.to(device)
     val_trajs   = val_trajs.to(device)
     test_trajs  = test_trajs.to(device)
