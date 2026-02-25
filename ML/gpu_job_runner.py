@@ -3,7 +3,7 @@ import subprocess
 from pathlib import Path
 
 # Set the global variables needed for the job submission
-CPUS = 12
+CPUS = 6
 GPUS = 1
 EMAIL = 'federico.saitta@student.manchester.ac.uk'
 
@@ -12,7 +12,7 @@ EMAIL = 'federico.saitta@student.manchester.ac.uk'
 
 # Additional configuration
 PARTITION = 'gpuL'  # Options: 'gpuA', 'gpuA40GB', 'gpuL'
-WALLTIME = '0-1'    # 1 day (format: days-hours)
+WALLTIME = '1-0'    # 1 day (format: days-hours)
 JOB_NAME = 'gpu_job'
 CUDA_VERSION = '11.8.0'  # Update this to an available version
 PYTHON_SCRIPT = 'main.py'
@@ -33,8 +33,14 @@ def create_slurm_script(output_file='submit_gpu_job.sh'):
 
 conda activate nuclear-ml
 
+# Launch nvidia-smi in background, logging every 10 seconds
+nvidia-smi --query-gpu=timestamp,utilization.gpu,utilization.memory,memory.used,memory.total \
+  --format=csv -l 10 > logs/gpu_usage.log &
+
 # Run your Python script
 python {PYTHON_SCRIPT}
+
+kill %1
 """
     
   # Create logs directory if it doesn't exist
