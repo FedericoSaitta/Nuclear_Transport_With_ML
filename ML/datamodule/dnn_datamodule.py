@@ -18,14 +18,7 @@ class DNN_Datamodule(L.LightningDataModule):
     self.train_batch_size = cfg_object.dataset.train.batch_size
     self.val_batch_size = cfg_object.dataset.val.batch_size
 
-    if cfg_object.runtime.num_workers == -1: 
-      try:
-        self.num_workers = len(os.sched_getaffinity(0))
-      except AttributeError:
-        # Windows doesn't have sched_getaffinity
-        self.num_workers = os.cpu_count()
-    else:
-      self.num_workers = cfg_object.runtime.num_workers
+    self.num_workers = cfg_object.runtime.num_workers
     logger.info(f"Using {self.num_workers} cpus")
     
     # Get the inputs and target dictionaries that include their respective scaling
@@ -103,4 +96,4 @@ class DNN_Datamodule(L.LightningDataModule):
     return DataLoader(self.test_dataset, batch_size=self.val_batch_size, shuffle=False, num_workers=self.num_workers, persistent_workers=True)
 
   def predict_dataloader(self):
-    return DataLoader(self.test_dataset, batch_size=self.val_batch_size, shuffle=False, num_workers=self.num_workers, persistent_workers=True)
+    return self.test_dataloader()

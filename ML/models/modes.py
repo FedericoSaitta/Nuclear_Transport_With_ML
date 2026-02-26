@@ -49,7 +49,7 @@ def _build_trainer(cfg, callbacks, pl_logger, **extra_kwargs):
     devices="auto",
     callbacks=callbacks,
     logger=pl_logger,
-    gradient_clip_val=1.0,
+    gradient_clip_val=cfg.train.grad_clip,
     gradient_clip_algorithm="norm",
     **extra_kwargs,
   )
