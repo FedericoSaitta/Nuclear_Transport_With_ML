@@ -35,7 +35,9 @@ class ODEFuncForced(nn.Module):
         self.net = nn.Sequential(
             nn.Linear(2, hidden_dim),     # inputs: [power_at_t, U238]
             nn.Tanh(),
-            nn.Linear(hidden_dim, hidden_dim),
+            nn.Linear(hidden_dim, hidden_dim), #hidden layer 1
+            nn.Tanh(),
+            nn.Linear(hidden_dim, hidden_dim), #hidden layer 2
             nn.Tanh(),
             nn.Linear(hidden_dim, 1),     # output: dU238/dt
         )
@@ -268,6 +270,20 @@ def reshape_to_trajectories(X, steps_per_run):
     )
 
 
+class EarlyStopper:
+    def __init__(self, patience=200):
+        self.patience = patience
+        self.best_loss = float('inf')
+        self.epochs_without_improvement = 0
+
+    def should_stop(self, val_loss):
+        if val_loss < self.best_loss:
+            self.best_loss = val_loss
+            self.epochs_without_improvement = 0
+        else:
+            self.epochs_without_improvement += 1
+        return self.epochs_without_improvement >= self.patience
+    
 # ─── Main ────────────────────────────────────────────────────────────────────
 
 def main():
@@ -338,15 +354,15 @@ def main():
     t_span = torch.tensor(time_array[:actual_steps], dtype=torch.float32, device=device)
 
     # ── Model, optimiser, scheduler ──
-    hidden_dim = 64
+    hidden_dim = 128
     func = ODEFuncForced(hidden_dim).to(device)
-    optimizer = torch.optim.AdamW(func.parameters(), lr=5e-4)
+    optimizer = torch.optim.AdamW(func.parameters(), lr=5e-5)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimizer, patience=50, factor=0.5,
     )
-
+    early_stopper = EarlyStopper(patience=200)
     # ── Training loop ──
-    num_epochs = 100
+    num_epochs = 6000
     best_loss = float('inf')
     best_model_state = None
     train_losses, val_losses = [], []
@@ -366,6 +382,9 @@ def main():
         lr = optimizer.param_groups[0]['lr']
         logger.info(f"Epoch {epoch:4d} | Train: {avg_train:.6f} | Val: {avg_val:.6f} | LR: {lr:.2e} | NFE: {func.nfe}")
         
+        if early_stopper.should_stop(avg_val):
+            logger.info(f"Early stopping at epoch {epoch} — no improvement for {early_stopper.patience} epochs")
+            break
 
     print(f"\nBest val loss: {best_loss:.6f} — restoring best weights")
     func.load_state_dict(best_model_state)
