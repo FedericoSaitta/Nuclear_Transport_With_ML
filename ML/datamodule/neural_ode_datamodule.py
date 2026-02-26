@@ -123,9 +123,11 @@ class NODE_Datamodule(L.LightningDataModule):
         assert not torch.isnan(trajs).any(), \
             f"NaNs in {split_name} trajectories: {torch.isnan(trajs).sum()}"
 
-    # ── Store time span ──
+    # ── Store time span (normalized to [0, 1]) ──
+    raw_t = self.time_array[:self.actual_steps]
     self.t_span = torch.tensor(
-        self.time_array[:self.actual_steps], dtype=torch.float32,
+        (raw_t - raw_t[0]) / (raw_t[-1] - raw_t[0]),
+        dtype=torch.float32,
     )
 
     # ── Wrap in TensorDatasets ──

@@ -145,7 +145,6 @@ def train_from_checkpoint_and_test(datamodule, model_class, cfg):
 
   model = model_class(cfg)
   datamodule.setup(stage="fit")
-  model.setup(stage="fit")
   model = load_checkpoint_into_model(model, cfg.runtime.ckp_path)
 
   logger.info("Successfully loaded checkpoint — starting training")
