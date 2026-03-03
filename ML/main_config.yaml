@@ -1,6 +1,6 @@
 dataset:
   path_to_data: data/casl_3305_runs_inter.h5
-  fraction_of_data: 0.1
+  fraction_of_data: 0.5
 
   inputs:
     power_W_g: MinMax
@@ -10,33 +10,33 @@ dataset:
 
   target_delta_conc: False
   train:
-    batch_size: 512
+    batch_size: 64
   val:
-    batch_size: 8192
+    batch_size: 300
     
 model:
-  name: NODE_mae_test_big
-  layers: [128, 128]
+  name: NODE_TEST_new_plots
+  layers: [64, 64]
   dropout_probability: 0.0
-  activation: tanh
+  activation: gelu
   output_activation: none
   residual_connections: false
 
 train:
-  loss: mae
-  learning_rate: 5e-5
+  loss: huber
+  learning_rate: 5e-4
   weight_decay: 0.0
-  lr_scheduler_patience: 10
-  num_epochs: 20000
-  early_stopping_patience: 50
-  grad_clip: 1.0
+  lr_scheduler_patience: 25
+  num_epochs: 10000
+  early_stopping_patience: 100
+  grad_clip: 0.0 # Lets try and disable grad clip
   drop_last: false
 
 runtime:
   mode: train
   model: NODE
-  ckp_path: results/NODE_Test/best-NODE_Test-epoch=195.ckpt
+  ckp_path: null
   device: cuda
   seed: 42
-  num_workers: 6
+  num_workers: 12
   model_database: Chain_Model.db
