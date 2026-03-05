@@ -490,3 +490,66 @@ def plot_error_growth_metric(avg_tf_error, avg_ar_error, std_tf_error, std_ar_er
       plt.close()
       
       print(f"{metric_name} growth plot ({scale_type} scale) saved: {filename}")
+
+
+# ─── Plotting Trajectories ────────────────────────────
+
+def plot_node_trajectory(t, u238_pred, u238_true, power, title, save_path):
+    """Three-panel plot: power forcing, U238 prediction vs truth, residual."""
+    fig, (ax1, ax2, ax3) = plt.subplots(
+        3, 1, figsize=(10, 8), height_ratios=[1, 2, 1],
+        sharex=True, gridspec_kw={'hspace': 0.1},
+    )
+
+    ax1.plot(t, power, color='tab:orange', linewidth=1.0)
+    ax1.set_ylabel('Power (scaled)')
+    ax1.set_title(title, fontsize=14, fontweight='bold')
+    ax1.grid(True, alpha=0.3)
+
+    ax2.plot(t, u238_true, label='Truth', linewidth=1.5)
+    ax2.plot(t, u238_pred, label='Prediction', linewidth=1.5, linestyle='--')
+    ax2.set_ylabel('U238 (scaled)')
+    ax2.legend(fontsize=10)
+    ax2.grid(True, alpha=0.3)
+
+    residuals = u238_pred - u238_true
+    ax3.plot(t, residuals, color='tab:red', linewidth=0.8)
+    ax3.axhline(0, color='black', linewidth=0.5, linestyle='--')
+    ax3.set_ylabel('Residual')
+    ax3.set_xlabel('Time')
+    ax3.grid(True, alpha=0.3)
+
+    fig.savefig(save_path, bbox_inches='tight', dpi=300)
+    plt.close(fig)
+    logger.info(f"NODE trajectory plot saved to: {save_path}")
+
+
+def plot_node_trajectory_summary(t, all_preds, all_trues, title, save_path):
+    """Overlay multiple trajectory predictions with mean absolute residual."""
+    fig, (ax1, ax2) = plt.subplots(
+        2, 1, figsize=(12, 7), height_ratios=[3, 1],
+        sharex=True, gridspec_kw={'hspace': 0.05},
+    )
+
+    for i in range(len(all_preds)):
+        ax1.plot(t, all_trues[i], color='tab:blue', alpha=0.3, linewidth=0.5,
+                 label='Truth' if i == 0 else None)
+        ax1.plot(t, all_preds[i], color='tab:red', alpha=0.3, linewidth=0.5,
+                 label='Prediction' if i == 0 else None)
+
+    ax1.set_ylabel('U238 (scaled)', fontsize=12)
+    ax1.set_title(title, fontsize=14, fontweight='bold')
+    ax1.legend(fontsize=10)
+    ax1.grid(True, alpha=0.3)
+
+    all_residuals = np.array(all_preds) - np.array(all_trues)
+    mean_abs_res = np.mean(np.abs(all_residuals), axis=0)
+    ax2.plot(t, mean_abs_res, color='tab:red', linewidth=1.0)
+    ax2.axhline(0, color='black', linewidth=0.5, linestyle='--')
+    ax2.set_ylabel('Mean |Residual|', fontsize=12)
+    ax2.set_xlabel('Time', fontsize=12)
+    ax2.grid(True, alpha=0.3)
+
+    fig.savefig(save_path, bbox_inches='tight', dpi=300)
+    plt.close(fig)
+    logger.info(f"NODE trajectory summary saved to: {save_path}")

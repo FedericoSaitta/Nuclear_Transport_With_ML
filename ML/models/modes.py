@@ -49,7 +49,7 @@ def _build_trainer(cfg, callbacks, pl_logger, **extra_kwargs):
     devices="auto",
     callbacks=callbacks,
     logger=pl_logger,
-    gradient_clip_val=1.0,
+    gradient_clip_val=cfg.train.grad_clip,
     gradient_clip_algorithm="norm",
     **extra_kwargs,
   )
@@ -145,7 +145,6 @@ def train_from_checkpoint_and_test(datamodule, model_class, cfg):
 
   model = model_class(cfg)
   datamodule.setup(stage="fit")
-  model.setup(stage="fit")
   model = load_checkpoint_into_model(model, cfg.runtime.ckp_path)
 
   logger.info("Successfully loaded checkpoint — starting training")

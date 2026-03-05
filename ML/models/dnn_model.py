@@ -20,6 +20,7 @@ from ML.models.model_helper import get_loss_fn
 class DNN_Model(L.LightningModule):
   def __init__(self, config_object):
     super().__init__()
+    self.cfg = config_object
 
     # Model architecture
     self.n_inputs = len(config_object.dataset.inputs)
@@ -31,10 +32,7 @@ class DNN_Model(L.LightningModule):
     self.residual_connections = config_object.model.residual_connections
 
     # Training configuration
-    self.learning_rate = config_object.train.learning_rate
-    self.weight_decay = config_object.train.weight_decay
     self.loss_fn = get_loss_fn(config_object.train.loss)
-    self.lr_scheduler_patience = config_object.train.lr_scheduler_patience
 
     ## If residual connections are turned on but layer inputs and outputs dont match they wont be used
     self.residual_map = [(in_size == out_size) for in_size, out_size in zip(self.NN_layers[:-1], self.NN_layers[1:])]
@@ -214,17 +212,21 @@ class DNN_Model(L.LightningModule):
       )
         
   def configure_optimizers(self):
-    optimizer = torch.optim.AdamW(self.parameters(), lr=self.learning_rate, weight_decay=self.weight_decay)
-    scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=self.lr_scheduler_patience)
-    return {
-      'optimizer': optimizer,
-      'lr_scheduler': {
-          'scheduler': scheduler,
-          'interval': 'epoch',   # call scheduler.step() every epoch
-          'monitor': 'val_loss', # metric to monitor for ReduceLROnPlateau
-      }
-    }
-  
+    optimizer = torch.optim.AdamW(
+        self.parameters(),
+        lr=self.cfg.train.learning_rate,
+        weight_decay=self.cfg.train.weight_decay,
+    )
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer, mode='min', factor=0.5,
+        patience=self.cfg.train.lr_scheduler_patience,
+    )
+
+    logger.info(f"Optimizer: AdamW | LR: {self.cfg.train.learning_rate} | Weight Decay: {self.cfg.train.weight_decay}")
+    logger.info(f"Scheduler: ReduceLROnPlateau | Patience: {self.cfg.train.lr_scheduler_patience} | Factor: 0.5")
+
+    return [optimizer], [{'scheduler': scheduler, 'monitor': 'val_loss'}]
+
   def _prepare_test_data(self):
     """Consolidate test data from batches."""
     return {
