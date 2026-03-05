@@ -58,7 +58,7 @@ class NODE_Model(L.LightningModule):
     """
     Shared forward pass for train/val/test.
 
-    Trajectory layout: [input_features..., target_features...]
+    Trajectory layout: [forcing_features..., target_features...]
     batch[0] is (batch_size, steps, n_input_features + n_target_features)
     
     Returns: target_pred (batch_size, steps, n_target), target_true (batch_size, steps, n_target)
@@ -67,12 +67,12 @@ class NODE_Model(L.LightningModule):
 
     n_in = self.n_input_features
     
-    power_profiles = trajectories[:, :, 0]
+    forcing_profiles = trajectories[:, :, :n_in]
     target_true = trajectories[:, :, n_in:]
     y0 = target_true[:, 0, :]
 
     t_span = self.t_span.to(trajectories.device)
-    self.func.set_forcing(t_span, power_profiles)
+    self.func.set_forcing(t_span, forcing_profiles)
 
     target_pred = odeint(
         self.func, y0, t_span,
@@ -214,9 +214,12 @@ class NODE_Model(L.LightningModule):
       target_names, per_target_metrics
     )
 
-    # 4. Feature importance
-    self._compute_feature_importance(
-      all_inputs_scaled, all_trues_scaled, target_names, datamodule
+    # 4. Jacobian sensitivity analysis (replaces permutation feature importance)
+    forcing_names = [
+      key for key, _ in sorted(datamodule.col_index_map.items(), key=lambda x: x[1])
+    ]
+    self._compute_jacobian_analysis(
+      all_inputs_scaled, all_trues_scaled, target_names, forcing_names
     )
     
     # 5. Prediction comparison plots (TF vs AR)
@@ -298,8 +301,8 @@ class NODE_Model(L.LightningModule):
         all_trues_scaled[batch_start:batch_end], dtype=torch.float32, device=device
       )
       
-      power_profiles = inputs_batch[:, :, 0]
-      self.func.set_forcing(t_span, power_profiles)
+      forcing_profiles = inputs_batch  # (batch, steps, n_input)
+      self.func.set_forcing(t_span, forcing_profiles)
       
       # Single-step integration for each timestep
       for t in range(steps - 1):
@@ -344,76 +347,290 @@ class NODE_Model(L.LightningModule):
         per_target_metrics[idx]['mare_tf'] = float(mare_tf)
         per_target_metrics[idx]['mare_ar'] = float(mare_ar)
 
-  # ─── Feature Importance ──────────────────────────────────────────────
+  # ─── Jacobian Sensitivity Analysis ───────────────────────────────────
+  def compute_state_jacobian(self, t_eval, y_eval, forcing_eval):
+      y_eval = y_eval.detach().requires_grad_(True)
+      
+      was_training = self.func.training
+      self.func.train()
+      self.func.set_forcing(t_eval, forcing_eval)
+      
+      with torch.enable_grad():
+        dydt = self.func(t_eval[0], y_eval)
+        
+        jacobians = []
+        for i in range(dydt.shape[-1]):
+          grad = torch.autograd.grad(
+            dydt[:, i].sum(), y_eval,
+            retain_graph=True, create_graph=False
+          )[0]
+          jacobians.append(grad)
+      
+      self.func.train(was_training)
+      return torch.stack(jacobians, dim=1)
 
-  def _compute_feature_importance(self, all_inputs_scaled, all_trues_scaled, 
-                                  target_names, datamodule):
+  def compute_forcing_jacobian(self, t_eval, y_eval, forcing_eval):
+      forcing_eval = forcing_eval.detach().requires_grad_(True)
+      
+      was_training = self.func.training
+      self.func.train()
+      self.func.set_forcing(t_eval, forcing_eval)
+      
+      with torch.enable_grad():
+        dydt = self.func(t_eval[0], y_eval.detach())
+        
+        jacobians = []
+        for i in range(dydt.shape[-1]):
+          grad = torch.autograd.grad(
+            dydt[:, i].sum(), forcing_eval,
+            retain_graph=True, create_graph=False
+          )[0]
+          jacobians.append(grad[:, 0, :])
+      
+      self.func.train(was_training)
+      return torch.stack(jacobians, dim=1)
+
+  def _compute_jacobian_analysis(self, all_inputs_scaled, all_trues_scaled,
+                                 target_names, forcing_names):
     """
-    Permutation feature importance for the NODE.
-    Shuffles each input feature across runs and measures the impact on R².
+    Evaluate state and forcing Jacobians across all test trajectories and
+    timesteps to build a unified sensitivity picture.
+    
+    Produces:
+      - Mean |∂f/∂y| heatmap: which state variables drive which derivatives
+      - Mean |∂f/∂u| heatmap: which forcing inputs drive which derivatives
+      - Combined sensitivity bar chart per target
+      - Jacobian evolution over time for each target
     """
     logger.info(f"\n{'='*20}")
-    logger.info("FEATURE IMPORTANCE ANALYSIS")
+    logger.info("JACOBIAN SENSITIVITY ANALYSIS")
     logger.info(f"{'='*20}")
-    
-    feature_names = [
-      key for key, _ in sorted(datamodule.col_index_map.items(), key=lambda x: x[1])
-    ]
     
     num_runs, steps, n_input = all_inputs_scaled.shape
     n_target = all_trues_scaled.shape[2]
-    n_repeats = 5
     device = self.device
     t_span = self.t_span.to(device)
     
-    # Compute baseline predictions (already have them, but recompute for consistency)
-    baseline_preds = self._batch_forward_numpy(all_inputs_scaled, all_trues_scaled)
+    # Sample a subset of runs and timesteps to keep computation tractable
+    max_runs = min(20, num_runs)
+    # Sample evenly spaced timesteps (skip first and last)
+    timestep_indices = np.linspace(1, steps - 2, min(20, steps - 2), dtype=int)
     
-    for idx, target_name in enumerate(target_names):
-      output_dir = os.path.join(self.result_dir, target_name)
+    logger.info(f"Evaluating Jacobians: {max_runs} runs × {len(timestep_indices)} timesteps")
+    
+    # Accumulators: (n_timesteps_sampled, n_target, n_target) and (n_timesteps_sampled, n_target, n_input)
+    all_state_jacs = []   # list of (n_target, n_target) per (run, timestep)
+    all_forcing_jacs = [] # list of (n_target, n_input) per (run, timestep)
+    
+    # For time-resolved analysis: {timestep_idx: list of jacobians}
+    state_jacs_by_time = {t: [] for t in timestep_indices}
+    forcing_jacs_by_time = {t: [] for t in timestep_indices}
+    
+    batch_size = 32
+    
+    for batch_start in range(0, max_runs, batch_size):
+      batch_end = min(batch_start + batch_size, max_runs)
+      
+      inputs_batch = torch.tensor(
+        all_inputs_scaled[batch_start:batch_end], dtype=torch.float32, device=device
+      )
+      trues_batch = torch.tensor(
+        all_trues_scaled[batch_start:batch_end], dtype=torch.float32, device=device
+      )
+      
+      for t_idx in timestep_indices:
+        y_t = trues_batch[:, t_idx, :]  # (batch, n_target)
+        
+        # State Jacobian: ∂f/∂y
+        state_jac = self.compute_state_jacobian(t_span, y_t, inputs_batch)
+        abs_state_jac = state_jac.abs().cpu().numpy()  # (batch, n_target, n_target)
+        
+        # Forcing Jacobian: ∂f/∂u
+        forcing_jac = self.compute_forcing_jacobian(t_span, y_t, inputs_batch)
+        abs_forcing_jac = forcing_jac.abs().cpu().numpy()  # (batch, n_target, n_input)
+        
+        # Collect per-sample Jacobians
+        for b in range(abs_state_jac.shape[0]):
+          all_state_jacs.append(abs_state_jac[b])
+          all_forcing_jacs.append(abs_forcing_jac[b])
+          state_jacs_by_time[t_idx].append(abs_state_jac[b])
+          forcing_jacs_by_time[t_idx].append(abs_forcing_jac[b])
+    
+    # ── Aggregate: mean absolute Jacobians ──
+    mean_state_jac = np.mean(all_state_jacs, axis=0)    # (n_target, n_target)
+    mean_forcing_jac = np.mean(all_forcing_jacs, axis=0) # (n_target, n_input)
+    std_state_jac = np.std(all_state_jacs, axis=0)
+    std_forcing_jac = np.std(all_forcing_jacs, axis=0)
+    
+    # ── Log summary ──
+    logger.info(f"\nMean |∂f/∂y| (state sensitivities):")
+    for i, t_name in enumerate(target_names):
+      for j, s_name in enumerate(target_names):
+        logger.info(f"  ∂(d{t_name}/dt)/∂{s_name}: {mean_state_jac[i,j]:.6f} ± {std_state_jac[i,j]:.6f}")
+    
+    logger.info(f"\nMean |∂f/∂u| (forcing sensitivities):")
+    for i, t_name in enumerate(target_names):
+      for j, f_name in enumerate(forcing_names):
+        logger.info(f"  ∂(d{t_name}/dt)/∂{f_name}: {mean_forcing_jac[i,j]:.6f} ± {std_forcing_jac[i,j]:.6f}")
+    
+    # ── Plot 1: State Jacobian heatmap ──
+    self._plot_jacobian_heatmap(
+      mean_state_jac, target_names, target_names,
+      title='State Sensitivity: Mean |∂f/∂y|',
+      xlabel='State variable (y_j)',
+      ylabel='Derivative (dy_i/dt)',
+      save_path=os.path.join(self.result_dir, 'jacobian_state_heatmap.png')
+    )
+    
+    # ── Plot 2: Forcing Jacobian heatmap ──
+    self._plot_jacobian_heatmap(
+      mean_forcing_jac, forcing_names, target_names,
+      title='Forcing Sensitivity: Mean |∂f/∂u|',
+      xlabel='Forcing input (u_j)',
+      ylabel='Derivative (dy_i/dt)',
+      save_path=os.path.join(self.result_dir, 'jacobian_forcing_heatmap.png')
+    )
+    
+    # ── Plot 3: Combined sensitivity bar chart per target ──
+    all_names = target_names + forcing_names
+    combined_jac = np.concatenate([mean_state_jac, mean_forcing_jac], axis=1)  # (n_target, n_target + n_input)
+    combined_std = np.concatenate([std_state_jac, std_forcing_jac], axis=1)
+    
+    for idx, t_name in enumerate(target_names):
+      output_dir = os.path.join(self.result_dir, t_name)
       os.makedirs(output_dir, exist_ok=True)
       
-      logger.info(f"\nComputing feature importance for: {target_name}")
-      
-      # Baseline R²
-      baseline_r2 = r2_score(
-        all_trues_scaled[:, :, idx].flatten(),
-        baseline_preds[:, :, idx].flatten()
+      self._plot_combined_sensitivity(
+        combined_jac[idx], combined_std[idx], all_names,
+        target_names, forcing_names,
+        title=f'Sensitivity of d{t_name}/dt',
+        save_path=os.path.join(output_dir, 'jacobian_combined_sensitivity.png')
       )
+    
+    # ── Plot 4: Jacobian evolution over time per target ──
+    sorted_timesteps = sorted(timestep_indices)
+    time_fractions = self.t_span.cpu().numpy()[sorted_timesteps]
+    
+    for idx, t_name in enumerate(target_names):
+      output_dir = os.path.join(self.result_dir, t_name)
       
-      importance_means = np.zeros(n_input)
-      importance_stds = np.zeros(n_input)
+      # State sensitivities over time
+      state_over_time = np.array([
+        np.mean([j[idx, :] for j in state_jacs_by_time[t]], axis=0)
+        for t in sorted_timesteps
+      ])  # (n_timesteps, n_target)
       
-      for feat_idx in range(n_input):
-        feat_scores = []
-        
-        for repeat in range(n_repeats):
-          # Shuffle this feature across runs
-          inputs_permuted = all_inputs_scaled.copy()
-          perm = np.random.permutation(num_runs)
-          inputs_permuted[:, :, feat_idx] = all_inputs_scaled[perm, :, feat_idx]
-          
-          # Get predictions with permuted feature
-          permuted_preds = self._batch_forward_numpy(inputs_permuted, all_trues_scaled)
-          
-          permuted_r2 = r2_score(
-            all_trues_scaled[:, :, idx].flatten(),
-            permuted_preds[:, :, idx].flatten()
-          )
-          
-          # Importance = drop in R² (higher = more important)
-          feat_scores.append(baseline_r2 - permuted_r2)
-        
-        importance_means[feat_idx] = np.mean(feat_scores)
-        importance_stds[feat_idx] = np.std(feat_scores)
+      # Forcing sensitivities over time
+      forcing_over_time = np.array([
+        np.mean([j[idx, :] for j in forcing_jacs_by_time[t]], axis=0)
+        for t in sorted_timesteps
+      ])  # (n_timesteps, n_input)
       
-      # Plot using same function as DNN
-      plot.plot_feature_importance(
-        importance_means, importance_stds, feature_names,
-        baseline_r2, output_dir, 'r2_score', n_top=20
+      self._plot_jacobian_over_time(
+        time_fractions, state_over_time, forcing_over_time,
+        target_names, forcing_names,
+        title=f'Sensitivity evolution: d{t_name}/dt',
+        save_path=os.path.join(output_dir, 'jacobian_time_evolution.png')
       )
-      
-      logger.info(f"  ✓ Feature importance plots saved to: {output_dir}")
+    
+    logger.info(f"\n  ✓ Jacobian analysis plots saved to: {self.result_dir}")
+
+  def _plot_jacobian_heatmap(self, matrix, col_names, row_names, title, xlabel, ylabel, save_path):
+    """Plot a heatmap of a Jacobian matrix."""
+    import matplotlib.pyplot as plt
+    
+    fig, ax = plt.subplots(figsize=(max(8, len(col_names) * 1.2), max(6, len(row_names) * 0.8)))
+    
+    im = ax.imshow(matrix, cmap='YlOrRd', aspect='auto')
+    plt.colorbar(im, ax=ax, label='Mean absolute sensitivity')
+    
+    ax.set_xticks(range(len(col_names)))
+    ax.set_xticklabels(col_names, rotation=45, ha='right', fontsize=9)
+    ax.set_yticks(range(len(row_names)))
+    ax.set_yticklabels(row_names, fontsize=9)
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel)
+    ax.set_title(title)
+    
+    # Annotate cells with values
+    for i in range(len(row_names)):
+      for j in range(len(col_names)):
+        val = matrix[i, j]
+        color = 'white' if val > matrix.max() * 0.6 else 'black'
+        ax.text(j, i, f'{val:.4f}', ha='center', va='center', fontsize=8, color=color)
+    
+    plt.tight_layout()
+    plt.savefig(save_path, dpi=150, bbox_inches='tight')
+    plt.close()
+
+  def _plot_combined_sensitivity(self, sensitivities, stds, all_names,
+                                 target_names, forcing_names, title, save_path):
+    """Bar chart showing sensitivity of one derivative to all state + forcing variables."""
+    import matplotlib.pyplot as plt
+    
+    n_target = len(target_names)
+    n_forcing = len(forcing_names)
+    
+    colors = ['#2196F3'] * n_target + ['#FF9800'] * n_forcing  # Blue for state, orange for forcing
+    
+    sorted_idx = np.argsort(sensitivities)[::-1]
+    sorted_sens = sensitivities[sorted_idx]
+    sorted_stds = stds[sorted_idx]
+    sorted_names = [all_names[i] for i in sorted_idx]
+    sorted_colors = [colors[i] for i in sorted_idx]
+    
+    fig, ax = plt.subplots(figsize=(max(8, len(all_names) * 0.6), 5))
+    bars = ax.bar(range(len(sorted_sens)), sorted_sens, yerr=sorted_stds,
+                  color=sorted_colors, capsize=3, edgecolor='gray', linewidth=0.5)
+    
+    ax.set_xticks(range(len(sorted_names)))
+    ax.set_xticklabels(sorted_names, rotation=45, ha='right', fontsize=9)
+    ax.set_ylabel('Mean |∂f/∂·|')
+    ax.set_title(title)
+    
+    # Legend
+    from matplotlib.patches import Patch
+    legend_elements = [
+      Patch(facecolor='#2196F3', label='State (∂f/∂y)'),
+      Patch(facecolor='#FF9800', label='Forcing (∂f/∂u)')
+    ]
+    ax.legend(handles=legend_elements, loc='upper right')
+    
+    plt.tight_layout()
+    plt.savefig(save_path, dpi=150, bbox_inches='tight')
+    plt.close()
+
+  def _plot_jacobian_over_time(self, time_fractions, state_over_time, forcing_over_time,
+                               target_names, forcing_names, title, save_path):
+    """Line plot showing how sensitivities evolve over the trajectory."""
+    import matplotlib.pyplot as plt
+    
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
+    
+    # State sensitivities
+    for j, name in enumerate(target_names):
+      ax1.plot(time_fractions, state_over_time[:, j], label=name, linewidth=1.5)
+    ax1.set_xlabel('Normalised time')
+    ax1.set_ylabel('Mean |∂f/∂y_j|')
+    ax1.set_title('State sensitivities')
+    ax1.legend(fontsize=8)
+    ax1.grid(True, alpha=0.3)
+    
+    # Forcing sensitivities
+    for j, name in enumerate(forcing_names):
+      ax2.plot(time_fractions, forcing_over_time[:, j], label=name, linewidth=1.5)
+    ax2.set_xlabel('Normalised time')
+    ax2.set_ylabel('Mean |∂f/∂u_j|')
+    ax2.set_title('Forcing sensitivities')
+    ax2.legend(fontsize=8)
+    ax2.grid(True, alpha=0.3)
+    
+    fig.suptitle(title, fontsize=12, fontweight='bold')
+    plt.tight_layout()
+    plt.savefig(save_path, dpi=150, bbox_inches='tight')
+    plt.close()
+
+  # ─── Batch Forward (for other analyses) ──────────────────────────────
 
   def _batch_forward_numpy(self, inputs_scaled, trues_scaled):
     """
@@ -440,10 +657,10 @@ class NODE_Model(L.LightningModule):
           trues_scaled[batch_start:batch_end], dtype=torch.float32, device=device
         )
         
-        power_profiles = inputs_batch[:, :, 0]
+        forcing_profiles = inputs_batch  # (batch, steps, n_input)
         y0 = trues_batch[:, 0, :]
         
-        self.func.set_forcing(t_span, power_profiles)
+        self.func.set_forcing(t_span, forcing_profiles)
         
         pred = odeint(
           self.func, y0, t_span,

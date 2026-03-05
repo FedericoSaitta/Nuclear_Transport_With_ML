@@ -40,11 +40,14 @@ class ODEFuncForced(nn.Module):
     super().__init__()
     self.nfe = 0
     self.t_points = None
-    self.power_profiles = None
+    self.forcing_profiles = None
+
+    n_input = cfg.model.n_input_features
+    n_target = cfg.model.n_target_features
 
     self.net = Deep_Neural_Network(
-      n_inputs=2,              # power + U238
-      n_outputs=1,             # dU238/dt
+      n_inputs=n_input + n_target,
+      n_outputs=n_target,
       hidden_layers=cfg.model.layers,
       dropout_prob=cfg.model.dropout_probability,
       activation=cfg.model.activation,
@@ -52,26 +55,25 @@ class ODEFuncForced(nn.Module):
       residual=cfg.model.residual_connections,
     )
 
-  def set_forcing(self, t_points, power_profiles):
+  def set_forcing(self, t_points, forcing_profiles):
     self.t_points = t_points
-    self.power_profiles = power_profiles
+    self.forcing_profiles = forcing_profiles  # (batch, steps, n_input)
 
-  def _interpolate_power(self, t):
+  def _interpolate_forcing(self, t):
     t_clamped = t.clamp(self.t_points[0], self.t_points[-1])
     idx = torch.searchsorted(self.t_points, t_clamped.unsqueeze(0)).squeeze() - 1
     idx = idx.clamp(0, len(self.t_points) - 2)
 
     t0 = self.t_points[idx]
     t1 = self.t_points[idx + 1]
-    p0 = self.power_profiles[:, idx]
-    p1 = self.power_profiles[:, idx + 1]
-
     frac = (t_clamped - t0) / (t1 - t0 + 1e-8)
-    return (p0 + frac * (p1 - p0)).unsqueeze(-1)
 
+    f0 = self.forcing_profiles[:, idx, :]   # (batch, n_input)
+    f1 = self.forcing_profiles[:, idx + 1, :]
+    return f0 + frac * (f1 - f0)
 
   def forward(self, t, y):
     self.nfe += 1
-    power = self._interpolate_power(t)
-    combined = torch.cat([power, y], dim=-1)
+    forcing = self._interpolate_forcing(t)      # (batch, n_input)
+    combined = torch.cat([forcing, y], dim=-1)   # (batch, n_input + n_target)
     return self.net(combined)
