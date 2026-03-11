@@ -393,8 +393,11 @@ class NODE_Model(L.LightningModule):
   # ─── Jacobian Sensitivity Analysis ───────────────────────────────────
   def compute_state_jacobian(self, t_eval, y_eval, forcing_eval, t_idx):
       with torch.inference_mode(False):
+          # Clone all tensors to escape inference-mode tracking
+          t_eval = t_eval.clone()
+          forcing_eval = forcing_eval.clone()
           y_eval = y_eval.clone().requires_grad_(True)
-          
+
           was_training = self.func.training
           self.func.train()
           self.func.set_forcing(t_eval, forcing_eval)
@@ -414,13 +417,16 @@ class NODE_Model(L.LightningModule):
 
   def compute_forcing_jacobian(self, t_eval, y_eval, forcing_eval, t_idx):
       with torch.inference_mode(False):
+          # Clone all tensors to escape inference-mode tracking
+          t_eval = t_eval.clone()
+          y_eval = y_eval.clone().detach()
           forcing_eval = forcing_eval.clone().requires_grad_(True)
-          
+
           was_training = self.func.training
           self.func.train()
           self.func.set_forcing(t_eval, forcing_eval)
-          
-          dydt = self.func(t_eval[t_idx], y_eval.clone().detach())
+
+          dydt = self.func(t_eval[t_idx], y_eval)
           
           # Find which forcing index the interpolation actually used
           with torch.no_grad():
