@@ -6,6 +6,8 @@ dataset:
     power_W_g: MinMax
   targets:
     U238: MinMax
+    Np239: MinMax
+    Pu239: MinMax
 
   target_delta_conc: False
   train:
@@ -15,9 +17,10 @@ dataset:
     
 model:
   n_input_features: 1    # power only
-  n_target_features: 1   # U238
+  n_target_features: 3   # U238, Np239, Pu239
 
-  name: testing_git_pull_worked_gpuA
+  name: matrix_ode_3x3_burnup
+  matrix_ode: true        # Use depletion matrix: dy/dt = A(forcing) @ y
   layers: [64, 64]
   dropout_probability: 0.0
   activation: tanh
