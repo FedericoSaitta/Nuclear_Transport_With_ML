@@ -24,6 +24,10 @@ class NODE_Model(L.LightningModule):
     self.save_hyperparameters(OmegaConf.to_container(config_object, resolve=True))
     self.cfg = config_object
 
+    # Infer feature counts from config target/input lists to avoid mismatch
+    config_object.model.n_input_features = len(config_object.dataset.inputs)
+    config_object.model.n_target_features = len(config_object.dataset.targets)
+
     # Model — choose between standard ODE and matrix-based ODE
     self.matrix_ode = getattr(config_object.model, 'matrix_ode', False)
     if self.matrix_ode:
