@@ -93,9 +93,10 @@ class ODEFuncMatrix(nn.Module):
 
   Sparsity modes (cfg.model.matrix_sparsity):
     - "full"  : all n²  entries are learnable (default)
-    - "chain" : bidiagonal — only diagonal + sub-diagonal are non-zero,
-                enforcing a sequential decay chain in the order that
-                targets are listed in the config (2n-1 parameters)
+    - "chain" : bidiagonal with mass conservation — the network outputs n
+                rates r₁…rₙ; diagonal = -rᵢ, sub-diagonal = +r_{i-1}.
+                Atoms lost from isotope i-1 exactly appear in isotope i.
+                Only n parameters instead of n².
   """
 
   def __init__(self, cfg):
@@ -113,16 +114,11 @@ class ODEFuncMatrix(nn.Module):
     self.sparsity = sparsity
 
     if sparsity == 'chain':
-      # Bidiagonal: diagonal + sub-diagonal only
-      # row_idx[k], col_idx[k] give the (i,j) position of the k-th learnable entry
-      rows, cols = [], []
-      for i in range(n_target):
-        rows.append(i); cols.append(i)          # diagonal
-      for i in range(1, n_target):
-        rows.append(i); cols.append(i - 1)      # sub-diagonal
-      self.register_buffer('mask_rows', torch.tensor(rows, dtype=torch.long))
-      self.register_buffer('mask_cols', torch.tensor(cols, dtype=torch.long))
-      n_outputs = len(rows)   # 2n - 1
+      # The network outputs n rates r₁…rₙ.  The matrix is built as:
+      #   diagonal(i,i)     = -rᵢ          (loss from isotope i)
+      #   sub-diag(i,i-1)   = +r_{i-1}     (production: what leaves i-1 enters i)
+      # This enforces mass conservation along the chain automatically.
+      n_outputs = n_target   # one rate per isotope
     else:
       n_outputs = n_target * n_target
 
@@ -161,13 +157,15 @@ class ODEFuncMatrix(nn.Module):
     n = self.n_target
 
     if self.sparsity == 'chain':
-      # Place learnable entries into a zero matrix
+      # Network outputs n raw values -> n positive rates via softplus
+      rates = F.softplus(raw)                               # (batch, n)
       A = raw.new_zeros(batch, n, n)
-      # First n entries are diagonal, rest are sub-diagonal
-      diag_vals = -F.softplus(raw[:, :n])                   # negative (loss)
-      offdiag_vals = F.softplus(raw[:, n:])                 # positive (production)
-      vals = torch.cat([diag_vals, offdiag_vals], dim=1)    # (batch, 2n-1)
-      A[:, self.mask_rows, self.mask_cols] = vals
+      # Diagonal: -rᵢ (loss from each isotope)
+      idx = torch.arange(n, device=raw.device)
+      A[:, idx, idx] = -rates
+      # Sub-diagonal: +r_{i-1} (what leaves isotope i-1 enters isotope i)
+      if n > 1:
+        A[:, idx[1:], idx[:-1]] = rates[:, :-1]
     else:
       raw = raw.view(batch, n, n)
       # Off-diagonal: positive (production terms)
