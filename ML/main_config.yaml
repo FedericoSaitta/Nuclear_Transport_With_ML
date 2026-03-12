@@ -20,6 +20,7 @@ dataset:
 model:
   name: matrix_ode_4x4_RK4
   matrix_ode: true        # Use depletion matrix: dy/dt = A(forcing) @ y
+  matrix_sparsity: full   # "full" (all n² entries) or "chain" (bidiagonal: diagonal + sub-diagonal only)
   layers: [64, 64]
   dropout_probability: 0.0
   activation: tanh
