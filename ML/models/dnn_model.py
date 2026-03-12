@@ -248,15 +248,15 @@ class DNN_Model(L.LightningModule):
     
     return mae_per_output, rmse_per_output, r2_per_output
   
-  def _process_single_output(self, idx, target_name, y_true, y_pred, mae_output, rmse_output, r2_output):
+  def _process_single_output(self, idx, target_name, y_true, y_pred, mae_output, rmse_output, r2_output, steps_per_run=100):
     """Process and visualize results for a single output."""
     output_dir = os.path.join(self.result_dir, target_name)
     os.makedirs(output_dir, exist_ok=True)
-    
+
     # Generate plots
     plot.plot_predictions_vs_actuals(y_true, y_pred, mae_output, rmse_output, r2_output, output_dir)
-    plot.plot_residuals_combined(y_true, y_pred, output_dir)
-    
+    plot.plot_residuals_combined(y_true, y_pred, output_dir, steps_per_run=steps_per_run)
+
     return output_dir
   
   def _compute_mare_comparison(self, X_test, Y_test, y_true_test, y_pred_test, target_names, datamodule, per_target_metrics=None):
