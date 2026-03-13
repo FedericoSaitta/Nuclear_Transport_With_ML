@@ -91,6 +91,9 @@ class ODEFuncMatrix(nn.Module):
     - Diagonal entries are negative (decay/absorption losses)
     - Off-diagonal entries are positive (production from transmutation)
     - Entries listed in cfg.model.matrix_zero_entries are forced to zero
+
+  The network only outputs active (non-zero) matrix entries, so no
+  capacity is wasted on entries that are immediately masked out.
   """
 
   def __init__(self, cfg):
@@ -102,7 +105,7 @@ class ODEFuncMatrix(nn.Module):
     n_input = len(cfg.dataset.inputs)
     self.n_target = len(cfg.dataset.targets)
 
-    # Build sparsity mask: True = active entry, False = forced to zero
+    # Build sparsity mask and identify active entries
     sparsity_mask = torch.ones(self.n_target, self.n_target, dtype=torch.bool)
     zero_entries = getattr(cfg.model, 'matrix_zero_entries', None)
     if zero_entries is not None:
@@ -111,55 +114,64 @@ class ODEFuncMatrix(nn.Module):
         sparsity_mask[i, j] = False
     self.register_buffer('sparsity_mask', sparsity_mask)
 
-    # Network takes forcing only -> outputs n_target^2 matrix entries
+    # Precompute indices of active entries (row, col) and which are diagonal
+    active_rows, active_cols = torch.where(sparsity_mask)
+    self.register_buffer('active_rows', active_rows)
+    self.register_buffer('active_cols', active_cols)
+    self.register_buffer('active_is_diag', active_rows == active_cols)
+    self.n_active = int(active_rows.shape[0])
+
+    # Network outputs only the active entries
     self.net = Deep_Neural_Network(
       n_inputs=n_input,
-      n_outputs=self.n_target * self.n_target,
+      n_outputs=self.n_active,
       hidden_layers=cfg.model.layers,
       dropout_prob=cfg.model.dropout_probability,
       activation=cfg.model.activation,
       output_activation='none',  # We apply our own constraints
       residual=cfg.model.residual_connections,
     )
- 
+
   def set_forcing(self, t_points, forcing_profiles):
     self.t_points = t_points
     self.forcing_profiles = forcing_profiles  # (batch, steps, n_input)
- 
+
   def _interpolate_forcing(self, t):
     """Piecewise-constant (zero-order hold) forcing interpolation."""
     t_clamped = t.clamp(self.t_points[0], self.t_points[-1])
     idx = torch.searchsorted(self.t_points, t_clamped.unsqueeze(0)).squeeze() - 1
     idx = idx.clamp(0, len(self.t_points) - 2)
- 
+
     return self.forcing_profiles[:, idx, :]   # (batch, n_input)
- 
+
   def _build_matrix(self, forcing):
     """Build constrained depletion matrix from forcing input.
 
     Returns: (batch, n_target, n_target) matrix with negative diagonal,
-             positive off-diagonal entries, and zero-masked entries.
+             positive off-diagonal entries, and zeros elsewhere.
     """
-    raw = self.net(forcing)                              # (batch, n_target^2)
-    raw = raw.view(-1, self.n_target, self.n_target)
+    raw = self.net(forcing)                              # (batch, n_active)
+    batch = raw.shape[0]
 
-    # Off-diagonal: positive (production terms)
-    A = F.softplus(raw)
+    # Apply sign constraints per entry
+    # Diagonal: -softplus (loss terms), Off-diagonal: +softplus (production)
+    constrained = torch.where(
+      self.active_is_diag,
+      -F.softplus(raw),
+       F.softplus(raw),
+    )
 
-    # Diagonal: negative (loss terms)
-    diag_mask = torch.eye(self.n_target, device=raw.device, dtype=torch.bool)
-    A = torch.where(diag_mask, -F.softplus(raw), A)
-
-    # Zero out entries specified in the sparsity mask
-    A = A * self.sparsity_mask
+    # Scatter active entries into the full matrix
+    A = raw.new_zeros(batch, self.n_target, self.n_target)
+    A[:, self.active_rows, self.active_cols] = constrained
 
     return A
- 
+
   def forward(self, t, y):
     self.nfe += 1
     forcing = self._interpolate_forcing(t)       # (batch, n_input)
     A = self._build_matrix(forcing)              # (batch, n_target, n_target)
- 
+
     # dy/dt = A @ y
     dydt = torch.bmm(A, y.unsqueeze(-1)).squeeze(-1)   # (batch, n_target)
     return dydt
