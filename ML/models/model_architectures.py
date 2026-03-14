@@ -85,7 +85,7 @@ class ODEFuncForced(nn.Module):
 class ODEFuncMatrix(nn.Module):
   """ODE function that predicts a depletion matrix A(t) from forcing inputs.
 
-  dy/dt = A(forcing(t)) @ y(t)
+  dy/dt = A(forcing(t), y(t)) @ y(t)
 
   Physical constraints:
     - Diagonal entries are negative (decay/absorption losses)
@@ -104,6 +104,7 @@ class ODEFuncMatrix(nn.Module):
 
     n_input = len(cfg.dataset.inputs)
     self.n_target = len(cfg.dataset.targets)
+    n_net_input = n_input + self.n_target  # forcing + isotope concentrations
 
     # Build sparsity mask and identify active entries
     sparsity_mask = torch.ones(self.n_target, self.n_target, dtype=torch.bool)
@@ -123,7 +124,7 @@ class ODEFuncMatrix(nn.Module):
 
     # Network outputs only the active entries
     self.net = Deep_Neural_Network(
-      n_inputs=n_input,
+      n_inputs=n_net_input,
       n_outputs=self.n_active,
       hidden_layers=cfg.model.layers,
       dropout_prob=cfg.model.dropout_probability,
@@ -144,13 +145,14 @@ class ODEFuncMatrix(nn.Module):
 
     return self.forcing_profiles[:, idx, :]   # (batch, n_input)
 
-  def _build_matrix(self, forcing):
-    """Build constrained depletion matrix from forcing input.
+  def _build_matrix(self, forcing, y):
+    """Build constrained depletion matrix from forcing and state inputs.
 
     Returns: (batch, n_target, n_target) matrix with negative diagonal,
              positive off-diagonal entries, and zeros elsewhere.
     """
-    raw = self.net(forcing)                              # (batch, n_active)
+    net_input = torch.cat([forcing, y], dim=-1)          # (batch, n_input + n_target)
+    raw = self.net(net_input)                            # (batch, n_active)
     batch = raw.shape[0]
 
     # Apply sign constraints per entry
@@ -170,7 +172,7 @@ class ODEFuncMatrix(nn.Module):
   def forward(self, t, y):
     self.nfe += 1
     forcing = self._interpolate_forcing(t)       # (batch, n_input)
-    A = self._build_matrix(forcing)              # (batch, n_target, n_target)
+    A = self._build_matrix(forcing, y)           # (batch, n_target, n_target)
 
     # dy/dt = A @ y
     dydt = torch.bmm(A, y.unsqueeze(-1)).squeeze(-1)   # (batch, n_target)
